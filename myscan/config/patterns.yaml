@@ -1,0 +1,161 @@
+patterns:
+  aws_access_key:
+    regex: "AKIA[0-9A-Z]{16}"
+    description: "AWS Access Key ID"
+    severity: "critical"
+    confidence: 0.95
+
+  aws_secret_key:
+    regex: "(?i)aws_secret_access_key\\s*[=:]\\s*['\"]?([A-Za-z0-9/+=]{40})['\"]?"
+    description: "AWS Secret Access Key"
+    severity: "critical"
+    confidence: 0.9
+
+  github_token:
+    regex: "ghp_[a-zA-Z0-9]{36}"
+    description: "GitHub Personal Access Token"
+    severity: "critical"
+    confidence: 0.95
+
+  github_oauth:
+    regex: "gho_[a-zA-Z0-9]{36}"
+    description: "GitHub OAuth Token"
+    severity: "critical"
+    confidence: 0.95
+
+  github_app_token:
+    regex: "(ghu|ghs)_[a-zA-Z0-9]{36}"
+    description: "GitHub App Token"
+    severity: "critical"
+    confidence: 0.95
+
+  slack_token:
+    regex: "xox[bporas]-[a-zA-Z0-9-]+"
+    description: "Slack Token"
+    severity: "critical"
+    confidence: 0.9
+
+  slack_webhook:
+    regex: "https://hooks\\.slack\\.com/services/T[a-zA-Z0-9_]{8}/B[a-zA-Z0-9_]{8}/[a-zA-Z0-9_]{24}"
+    description: "Slack Webhook URL"
+    severity: "high"
+    confidence: 0.95
+
+  google_api_key:
+    regex: "AIza[0-9A-Za-z\\-_]{35}"
+    description: "Google API Key"
+    severity: "critical"
+    confidence: 0.95
+
+  stripe_key:
+    regex: "(?i)(sk|pk)_(live|test)_[0-9a-zA-Z]{24,}"
+    description: "Stripe API Key"
+    severity: "critical"
+    confidence: 0.95
+
+  private_key:
+    regex: "-----BEGIN (RSA |EC |DSA |OPENSSH )?PRIVATE KEY-----"
+    description: "Private Key"
+    severity: "critical"
+    confidence: 0.99
+
+  generic_api_key:
+    regex: "(?i)(api[_-]?key|apikey|api_secret|secret[_-]?key)\\s*[=:]\\s*['\"]([a-zA-Z0-9\\-_]{20,})['\"]"
+    description: "Generic API Key"
+    severity: "high"
+    confidence: 0.7
+
+  password_in_code:
+    regex: "(?i)(password|passwd|pwd)\\s*[=:]\\s*['\"]([^'\"]{8,})['\"]"
+    description: "Hardcoded Password"
+    severity: "high"
+    confidence: 0.75
+
+  database_url:
+    regex: "(?i)(mysql|postgresql|mongodb|redis)://[^\\s\"']{10,}"
+    description: "Database Connection URL"
+    severity: "high"
+    confidence: 0.85
+
+  jwt_token:
+    regex: "eyJ[a-zA-Z0-9_-]*\\.eyJ[a-zA-Z0-9_-]*\\.[a-zA-Z0-9_-]*"
+    description: "JWT Token"
+    severity: "high"
+    confidence: 0.8
+
+  heroku_api_key:
+    regex: "(?i)heroku[_-]?api[_-]?key\\s*[=:]\\s*['\"]([a-f0-9-]{36})['\"]"
+    description: "Heroku API Key"
+    severity: "critical"
+    confidence: 0.9
+
+  npm_token:
+    regex: "npm_[a-zA-Z0-9]{36}"
+    description: "NPM Access Token"
+    severity: "critical"
+    confidence: 0.95
+
+  pypi_token:
+    regex: "pypi-[a-zA-Z0-9_-]{50,}"
+    description: "PyPI API Token"
+    severity: "critical"
+    confidence: 0.95
+
+  sendgrid_key:
+    regex: "SG\\.[a-zA-Z0-9_-]{22}\\.[a-zA-Z0-9_-]{43}"
+    description: "SendGrid API Key"
+    severity: "critical"
+    confidence: 0.95
+
+  twilio_key:
+    regex: "(?i)(twilio[_-]?api[_-]?key|TWILIO_API_KEY)\\s*[=:]\\s*['\"]([a-f0-9]{32})['\"]"
+    description: "Twilio API Key"
+    severity: "critical"
+    confidence: 0.9
+
+  telegram_token:
+    regex: "[0-9]+:AA[0-9A-Za-z_-]{33}"
+    description: "Telegram Bot Token"
+    severity: "critical"
+    confidence: 0.85
+
+entropy_threshold: 4.5
+
+scan_settings:
+  max_file_size_bytes: 1048576
+  max_line_length: 2000
+  skip_directories:
+    - ".git"
+    - "node_modules"
+    - "__pycache__"
+    - ".venv"
+    - "venv"
+    - "env"
+    - ".env.example"
+    - "dist"
+    - "build"
+    - ".tox"
+    - ".mypy_cache"
+    - ".pytest_cache"
+  skip_extensions:
+    - ".pyc"
+    - ".pyo"
+    - ".so"
+    - ".dll"
+    - ".exe"
+    - ".bin"
+    - ".jpg"
+    - ".jpeg"
+    - ".png"
+    - ".gif"
+    - ".ico"
+    - ".svg"
+    - ".woff"
+    - ".woff2"
+    - ".ttf"
+    - ".eot"
+    - ".map"
+    - ".min.js"
+    - ".min.css"
+    - ".lock"
+    - ".sum"

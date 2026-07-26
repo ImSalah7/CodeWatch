@@ -1,0 +1,12 @@
+.venv/
+.pytest_cache/
+__pycache__/
+*.pyc
+*.egg-info/
+myscan_reports/
+.venv
+.git/
+.gitignore
+*.md
+!README.md
+e2e_report.json

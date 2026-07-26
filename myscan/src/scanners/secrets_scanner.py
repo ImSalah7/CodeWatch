@@ -1,0 +1,304 @@
+"""Secrets detection scanner with literal-assignment validation and precise classification."""
+
+from __future__ import annotations
+
+import math
+import re
+from collections import Counter
+
+from ..core.models import Finding, FindingCategory, Language, CodeLocation, Severity
+from ..scanners import BaseScanner
+
+SECRET_PATTERNS: list[tuple[str, str, str, Severity, float, str, str]] = [
+    ("aws_access_key", r"AKIA[0-9A-Z]{16}", "AWS Access Key ID", Severity.CRITICAL, 0.95, "CWE-798", "Use IAM roles or environment variables."),
+    ("aws_secret_key", r"(?i)aws_secret_access_key\s*[=:]\s*['\"]?[A-Za-z0-9/+=]{40}", "AWS Secret Access Key", Severity.CRITICAL, 0.95, "CWE-798", "Use IAM roles or environment variables."),
+    ("github_token", r"ghp_[A-Za-z0-9]{36}", "GitHub Personal Access Token", Severity.CRITICAL, 0.95, "CWE-798", "Use GitHub Actions secrets."),
+    ("github_oauth", r"gho_[A-Za-z0-9]{36}", "GitHub OAuth Token", Severity.CRITICAL, 0.95, "CWE-798", "Use GitHub Actions secrets."),
+    ("github_app_token", r"(?:ghu|ghs)_[A-Za-z0-9]{36}", "GitHub App Token", Severity.CRITICAL, 0.9, "CWE-798", "Use GitHub App installation tokens."),
+    ("slack_token", r"xox[bpoa]-[0-9]{10,13}-[a-zA-Z0-9-]+", "Slack Token", Severity.CRITICAL, 0.95, "CWE-798", "Use Slack app tokens with minimal scopes."),
+    ("slack_webhook", r"https://hooks\.slack\.com/services/T[A-Z0-9]+/B[A-Z0-9]+/[a-zA-Z0-9]+", "Slack Webhook URL", Severity.HIGH, 0.9, "CWE-798", "Store webhook URLs in environment variables."),
+    ("google_api_key", r"AIza[0-9A-Za-z\-_]{35}", "Google API Key", Severity.HIGH, 0.9, "CWE-798", "Restrict API keys by IP and API."),
+    ("stripe_key_live", r"sk_live_[0-9a-zA-Z]{24,}", "Stripe Live Secret Key", Severity.CRITICAL, 0.95, "CWE-798", "Use Stripe environment variables."),
+    ("stripe_key_test", r"sk_test_[0-9a-zA-Z]{24,}", "Stripe Test Secret Key", Severity.MEDIUM, 0.7, "CWE-798", "Store test keys in environment variables."),
+    ("heroku_api_key", r"(?i)heroku[_\s]*(?:api[_\s]*key)\s*[=:]\s*['\"]?[a-f0-9]{8}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{12}", "Heroku API Key", Severity.CRITICAL, 0.9, "CWE-798", "Use Heroku config vars."),
+    ("private_key_header", r"-----BEGIN (?:RSA |EC |DSA |OPENSSH )?PRIVATE KEY-----", "Private Key", Severity.CRITICAL, 0.95, "CWE-321", "Never commit private keys. Use a secrets manager."),
+    ("generic_api_key", r"(?i)(?:api[_-]?key|apikey|api_secret|api[_-]?secret)\s*[=:]\s*['\"]?[A-Za-z0-9\-_]{20,}", "Potential API Key", Severity.HIGH, 0.7, "CWE-798", "Move to environment variables."),
+    ("password_assignment", r"(?i)(?:password|passwd|pwd)\s*[=:]\s*['\"]?[^'\"\s]{8,}", "Hardcoded Password", Severity.CRITICAL, 0.85, "CWE-798", "Use a secrets manager."),
+    ("database_url", r"(?i)(?:db[_-]?url|database[_-]?url|mysql[_-]?url|postgres(?:ql)?[_-]?url|mongo(?:db)?[_-]?url)\s*[=:]\s*['\"]?(?:mysql|postgres(?:ql)?|mongodb|redis|sqlite)://", "Database Connection String", Severity.HIGH, 0.8, "CWE-798", "Use environment variables for connection strings."),
+    ("jwt_token", r"eyJ[A-Za-z0-9\-_]+\.eyJ[A-Za-z0-9\-_]+\.[A-Za-z0-9\-_.+/=]+", "JWT Token", Severity.HIGH, 0.8, "CWE-798", "Rotate tokens regularly. Never commit tokens."),
+    ("npm_token", r"npm_[A-Za-z0-9]{36}", "NPM Access Token", Severity.CRITICAL, 0.9, "CWE-798", "Use .npmrc with environment variables."),
+    ("sendgrid_key", r"SG\.[A-Za-z0-9\-_]{22}\.[A-Za-z0-9\-_]{43}", "SendGrid API Key", Severity.CRITICAL, 0.95, "CWE-798", "Use environment variables."),
+    ("twilio_key", r"SK[a-f0-9]{32}", "Twilio API Key", Severity.HIGH, 0.9, "CWE-798", "Use environment variables."),
+    ("telegram_token", r"\d{8,10}:[A-Za-z0-9_-]{35}", "Telegram Bot Token", Severity.HIGH, 0.85, "CWE-798", "Use environment variables."),
+]
+
+NOT_LITERAL_PATTERNS = [
+    re.compile(r'(?i)\binput\s*\('),
+    re.compile(r'(?i)\bos\.getenv\s*\('),
+    re.compile(r'(?i)\bos\.environ\b'),
+    re.compile(r'(?i)\benv\.get\s*\('),
+    re.compile(r'(?i)\bst\.text_input\s*\('),
+    re.compile(r'(?i)\bst\.number_input\s*\('),
+    re.compile(r'(?i)\brequest\.form\s*\['),
+    re.compile(r'(?i)\brequest\.args\s*\['),
+    re.compile(r'(?i)\brequest\.json\b'),
+    re.compile(r'(?i)\bsys\.argv\b'),
+    re.compile(r'(?i)\bconfig\.\w+'),
+    re.compile(r'(?i)\bsettings\.\w+'),
+    re.compile(r'(?i)\bself\.\w+'),
+    re.compile(r'(?i)\bkwargs\s*\['),
+    re.compile(r'(?i)\bargs\s*\['),
+    re.compile(r'(?i)\.get\s*\('),
+    re.compile(r'(?i)\bgetattr\s*\('),
+    re.compile(r'(?i)\bcollections\.\w+'),
+    re.compile(r'(?i)\bdict\s*\('),
+]
+
+
+def _is_literal_value(value: str) -> bool:
+    """Check if a value is a literal credential (string in quotes, numeric, etc)."""
+    stripped = value.strip()
+    if not stripped:
+        return False
+    if (stripped.startswith('"') and stripped.endswith('"')) or \
+       (stripped.startswith("'") and stripped.endswith("'")):
+        inner = stripped[1:-1]
+        return len(inner) >= 1
+    if stripped.startswith("b\"") or stripped.startswith("b'"):
+        return True
+    if re.match(r'^-?\d+(\.\d+)?$', stripped):
+        return True
+    return False
+
+
+def _is_non_literal_rhs(rhs: str) -> bool:
+    """Check if the RHS of an assignment is a non-literal (function call, variable ref, etc)."""
+    stripped = rhs.strip()
+    if not stripped:
+        return True
+    if _is_literal_value(stripped):
+        return False
+    for pattern in NOT_LITERAL_PATTERNS:
+        if pattern.search(stripped):
+            return True
+    if re.match(r'^[a-zA-Z_][a-zA-Z0-9_.]*$', stripped):
+        return True
+    return False
+
+
+def _classify_password_secret(variable_name: str, value: str) -> str:
+    """Sub-classify password-type secrets based on variable name and value context."""
+    lower_name = variable_name.lower()
+    lower_value = value.lower().strip("'\"")
+    if any(x in lower_name for x in ["db", "database", "mysql", "postgres", "redis", "mongo"]):
+        return "Database Password"
+    if any(x in lower_name for x in ["api_key", "apikey", "api_secret"]):
+        return "API Key"
+    if any(x in lower_name for x in ["jwt", "token", "secret_key", "signing"]):
+        return "JWT Secret"
+    if any(x in lower_name for x in ["aws", "amazon", "s3", "iam"]):
+        return "AWS Secret"
+    if any(x in lower_name for x in ["azure", "ms_", "microsoft"]):
+        return "Azure Secret"
+    if any(x in lower_name for x in ["google", "gcp", "firebase"]):
+        return "Google Secret"
+    if any(x in lower_name for x in ["github", "gh_"]):
+        return "GitHub Token"
+    if any(x in lower_name for x in ["gitlab", "gl_"]):
+        return "GitLab Token"
+    if any(x in lower_name for x in ["stripe", "sk_"]):
+        return "Stripe Key"
+    if any(x in lower_name for x in ["twilio", "tw_"]):
+        return "Twilio Key"
+    if any(x in lower_name for x in ["slack"]):
+        return "Slack Token"
+    if any(x in lower_name for x in ["discord"]):
+        return "Discord Token"
+    if "webhook" in lower_name:
+        return "Webhook Secret"
+    if any(x in lower_name for x in ["openai", "oa_"]):
+        return "OpenAI Key"
+    if any(x in lower_name for x in ["anthropic", "ant_"]):
+        return "Anthropic Key"
+    if "firebase" in lower_name:
+        return "Firebase Key"
+    if "bearer" in lower_name:
+        return "Bearer Token"
+    if "oauth" in lower_name:
+        return "OAuth Secret"
+    if any(x in lower_name for x in ["ssh", "rsa", "private"]):
+        return "SSH Key"
+    return "Hardcoded Password"
+
+
+SECRET_CLASSIFICATIONS: dict[str, tuple[str, str, str]] = {
+    "aws_access_key": ("AWS Access Key", "cloud_credential", "AWS"),
+    "aws_secret_key": ("AWS Secret Access Key", "cloud_credential", "AWS"),
+    "github_token": ("GitHub Personal Access Token", "api_token", "GitHub"),
+    "github_oauth": ("GitHub OAuth Token", "api_token", "GitHub"),
+    "github_app_token": ("GitHub App Token", "api_token", "GitHub"),
+    "slack_token": ("Slack Token", "api_token", "Slack"),
+    "slack_webhook": ("Slack Webhook URL", "webhook", "Slack"),
+    "google_api_key": ("Google API Key", "api_key", "Google"),
+    "stripe_key_live": ("Stripe Live Secret Key", "payment_key", "Stripe"),
+    "stripe_key_test": ("Stripe Test Secret Key", "payment_key", "Stripe"),
+    "heroku_api_key": ("Heroku API Key", "cloud_credential", "Heroku"),
+    "private_key_header": ("Private Key", "cryptographic_key", "Generic"),
+    "generic_api_key": ("API Key", "api_key", "Generic"),
+    "database_url": ("Database Connection String", "connection_string", "Database"),
+    "jwt_token": ("JWT Token", "authentication_token", "Generic"),
+    "npm_token": ("NPM Access Token", "api_token", "NPM"),
+    "sendgrid_key": ("SendGrid API Key", "api_key", "SendGrid"),
+    "twilio_key": ("Twilio API Key", "api_key", "Twilio"),
+    "telegram_token": ("Telegram Bot Token", "api_token", "Telegram"),
+    "high_entropy": ("High-Entropy String", "potential_secret", "Generic"),
+}
+
+
+class SecretsScanner(BaseScanner):
+    name = "secrets"
+    description = "Secrets and credential detection scanner"
+
+    def __init__(self, mask_secrets: bool = True):
+        self.mask_secrets = mask_secrets
+
+    def scan_file(self, content: str, file_path: str, language: Language) -> list[Finding]:
+        findings: list[Finding] = []
+        lines = content.splitlines()
+
+        for secret_type, pattern, title, severity, confidence, cwe, fix in SECRET_PATTERNS:
+            try:
+                regex = re.compile(pattern, re.IGNORECASE)
+            except re.error:
+                continue
+            for i, line in enumerate(lines, 1):
+                stripped = line.strip()
+                if stripped.startswith("#") or stripped.startswith("//") or stripped.startswith("*"):
+                    if secret_type != "private_key_header":
+                        continue
+                match = regex.search(line)
+                if not match:
+                    continue
+                raw = match.group()
+                if secret_type == "password_assignment":
+                    if not self._validate_password_line(line, raw):
+                        continue
+                    raw = self._extract_password_value(line)
+                    snippet = line.strip()
+                else:
+                    snippet = raw
+                classification = self._classify_finding(secret_type, line)
+                adjusted_confidence = self._adjust_confidence(confidence, line)
+                findings.append(Finding(
+                    rule_id=f"SEC_{secret_type.upper()}",
+                    title=classification,
+                    description=f"Found {classification.lower()} in source code.",
+                    severity=severity,
+                    confidence=adjusted_confidence,
+                    category=FindingCategory.SECRET,
+                    language=language,
+                    location=CodeLocation(
+                        file_path=file_path,
+                        line=i,
+                        code_snippet=snippet,
+                    ),
+                    cwe=cwe,
+                    fix_suggestion=fix,
+                    tags=["secret", secret_type],
+                    raw_secret=raw,
+                ))
+
+        findings.extend(self._check_high_entropy_strings(lines, file_path, language))
+        return findings
+
+    def _validate_password_line(self, line: str, match_value: str) -> bool:
+        """Validate that a password assignment is a literal credential, not a variable/function."""
+        eq_pos = line.lower().find("password")
+        if eq_pos < 0:
+            eq_pos = line.lower().find("passwd")
+        if eq_pos < 0:
+            eq_pos = line.lower().find("pwd")
+        if eq_pos < 0:
+            return True
+        after_eq = line[eq_pos:]
+        eq_match = re.search(r'[=:]\s*', after_eq)
+        if not eq_match:
+            return True
+        rhs = after_eq[eq_match.end():]
+        return not _is_non_literal_rhs(rhs)
+
+    def _classify_finding(self, secret_type: str, line: str) -> str:
+        """Classify the secret into a precise type."""
+        if secret_type == "password_assignment":
+            var_match = re.match(r'(?i)\s*(\w+)\s*[=:]', line)
+            variable_name = var_match.group(1) if var_match else ""
+            value_match = re.search(r'[=:]\s*[\'"]?([^\s\'"]+)', line)
+            value = value_match.group(1) if value_match else ""
+            return _classify_password_secret(variable_name, value)
+        classification = SECRET_CLASSIFICATIONS.get(secret_type)
+        if classification:
+            return classification[0]
+        return "Hardcoded Secret"
+
+    def _adjust_confidence(self, base: float, line: str) -> float:
+        lower = line.lower()
+        if any(x in lower for x in ["example", "sample", "test", "mock", "dummy", "placeholder", "xxx"]):
+            return base * 0.3
+        if any(x in lower for x in ["TODO", "FIXME", "HACK"]):
+            return base * 0.5
+        return base
+
+    def _extract_password_value(self, line: str) -> str:
+        """Extract the actual password value from the assignment line."""
+        eq_match = re.search(r'[=:]\s*', line)
+        if not eq_match:
+            return line.strip()
+        rhs = line[eq_match.end():].strip()
+        if (rhs.startswith('"') and rhs.endswith('"')) or (rhs.startswith("'") and rhs.endswith("'")):
+            return rhs[1:-1]
+        if rhs.startswith("(") and rhs.endswith(")"):
+            inner = rhs[1:-1].strip()
+            if (inner.startswith('"') and inner.endswith('"')) or (inner.startswith("'") and inner.endswith("'")):
+                return inner[1:-1]
+        return rhs.split()[0] if rhs.split() else rhs
+
+    def _mask_secret(self, secret: str) -> str:
+        if len(secret) > 8:
+            return secret[:4] + "*" * (len(secret) - 8) + secret[-4:]
+        return "***"
+
+    def _check_high_entropy_strings(self, lines: list[str], file_path: str, lang: Language) -> list[Finding]:
+        findings = []
+        for i, line in enumerate(lines, 1):
+            stripped = line.strip()
+            if stripped.startswith("#") or stripped.startswith("//"):
+                continue
+            matches = re.findall(r'["\']([A-Za-z0-9+/=\-_]{32,80})["\']', line)
+            for match in matches:
+                entropy = self._entropy(match)
+                if entropy > 4.5 and not match.isupper() and not match.islower() and not match.isdigit():
+                    if any(c in match for c in "ABCDEFGHIJKLMNOPQRSTUVWXYZ"):
+                        if any(c in match for c in "0123456789"):
+                            findings.append(Finding(
+                                rule_id="SEC_HIGH_ENTROPY",
+                                title="High-Entropy String",
+                                description=f"String has entropy {entropy:.1f}/8.0, may be a secret.",
+                                severity=Severity.MEDIUM,
+                                confidence=min(entropy / 8.0, 0.7),
+                                category=FindingCategory.SECRET,
+                                language=lang,
+                                location=CodeLocation(file_path=file_path, line=i, code_snippet=line.strip()),
+                                cwe="CWE-798",
+                                fix_suggestion="Verify if this is a secret. If so, move to environment variables.",
+                                tags=["secret", "entropy"],
+                                raw_secret=match,
+                            ))
+                            break
+        return findings
+
+    def _entropy(self, s: str) -> float:
+        if not s:
+            return 0.0
+        freq = Counter(s)
+        length = len(s)
+        return -sum((count / length) * math.log2(count / length) for count in freq.values())
