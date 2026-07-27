@@ -29,6 +29,8 @@ from .context_analyzer import (
     analyze_file_context,
 )
 from .trust_engine import TrustEngine, build_trust_from_pipeline
+from .import_resolver import build_import_table, ImportResolutionResult
+from .reachability import analyze_reachability, ReachabilityResult
 
 
 DANGEROUS_CALL_RULE_PREFIXES = {
@@ -71,6 +73,14 @@ class ValidationPipeline:
         self.min_confidence = min_confidence
         self.evidence_engine = EvidenceEngine(min_confidence=min_confidence)
         self.type_resolver = TypeResolver()
+        self._import_cache: Optional[ImportResolutionResult] = None
+        self._reachability_cache: Optional[ReachabilityResult] = None
+
+    def set_import_resolution(self, result: ImportResolutionResult) -> None:
+        self._import_cache = result
+
+    def set_reachability(self, result: ReachabilityResult) -> None:
+        self._reachability_cache = result
 
     def validate_finding(
         self,
@@ -133,7 +143,7 @@ class ValidationPipeline:
             finding, file_content, positive_evidences, negative_evidences
         )
 
-        # Stage 5: Secret-Specific Validation
+        # Stage 6: Secret-Specific Validation
         if category == "SECRET" or rule_id.startswith("SEC_"):
             secret_rejection = self._validate_secret(
                 finding, file_content, positive_evidences, negative_evidences
@@ -141,15 +151,25 @@ class ValidationPipeline:
             if secret_rejection is not None:
                 return None
 
-        # Stage 6: Evidence Collection is done above. Now evaluate.
-        # Stage 7: Confidence Calculation
+        # Stage 7: Import Resolution Validation
+        self._validate_imports(
+            finding, file_content, positive_evidences, negative_evidences
+        )
+
+        # Stage 8: Reachability Validation
+        self._validate_reachability(
+            finding, positive_evidences, negative_evidences
+        )
+
+        # Stage 9: Evidence Collection is done above. Now evaluate.
+        # Stage 10: Confidence Calculation
         result = self.evidence_engine.evaluate(
             positive_evidences=positive_evidences,
             negative_evidences=negative_evidences,
             min_evidence=1,
         )
 
-        # Stage 8: Decision
+        # Stage 11: Decision
         if not result.passed or not result.should_report:
             return None
 
@@ -346,6 +366,148 @@ class ValidationPipeline:
                 )
 
         return None
+
+    def _validate_imports(
+        self,
+        finding: dict,
+        file_content: str,
+        positive_evidences: list[Evidence],
+        negative_evidences: list[Evidence],
+    ) -> None:
+        """Stage 7: Import Resolution Validation.
+
+        Verify that the function/class being called is actually imported and available.
+        """
+        rule_id = finding.get("rule_id", "")
+        code_snippet = finding.get("code_snippet", "")
+        file_path = finding.get("file_path", "")
+
+        is_call_finding = any(
+            rule_id.lower().startswith(prefix)
+            for prefix in DANGEROUS_CALL_RULE_PREFIXES
+        )
+        if not is_call_finding or not self._import_cache:
+            return
+
+        call_name = _extract_call_name_from_snippet(code_snippet)
+        if not call_name:
+            return
+
+        root = call_name.split(".")[0] if "." in call_name else call_name
+        for imp in self._import_cache.imports:
+            if imp.source_file != file_path:
+                continue
+            for alias, real in imp.aliases.items():
+                if alias == root or real == root.split(".")[-1]:
+                    positive_evidences.append(
+                        self.evidence_engine.create_evidence(
+                            evidence_type=EvidenceType.AST_VERIFIED,
+                            signal="import_confirmed",
+                            strength=EvidenceStrength.MODERATE,
+                            reason=f"Import confirmed: {root} is imported in {file_path}",
+                            contribution=0.70,
+                        )
+                    )
+                    return
+
+        if root in ("eval", "exec", "compile", "__import__"):
+            positive_evidences.append(
+                self.evidence_engine.create_evidence(
+                    evidence_type=EvidenceType.AST_VERIFIED,
+                    signal="builtin_not_imported",
+                    strength=EvidenceStrength.MODERATE,
+                    reason=f"{root} is a builtin, no import needed",
+                    contribution=0.60,
+                )
+            )
+        elif "." in call_name:
+            negative_evidences.append(
+                self.evidence_engine.create_negative_evidence(
+                    signal="import_not_found",
+                    reason=f"Could not find import for {root} in {file_path}",
+                    penalty=-0.30,
+                )
+            )
+
+    def _validate_reachability(
+        self,
+        finding: dict,
+        positive_evidences: list[Evidence],
+        negative_evidences: list[Evidence],
+    ) -> None:
+        """Stage 8: Reachability Validation.
+
+        Check if the vulnerable code is actually reachable from entry points.
+        """
+        if not self._reachability_cache:
+            return
+
+        file_path = finding.get("file_path", "")
+        line = finding.get("line", 0)
+        rule_id = finding.get("rule_id", "")
+
+        is_call_finding = any(
+            rule_id.lower().startswith(prefix)
+            for prefix in DANGEROUS_CALL_RULE_PREFIXES
+        )
+        if not is_call_finding:
+            return
+
+        for fkey, freach in self._reachability_cache.functions.items():
+            if freach.file_path == file_path and abs(freach.line - line) <= 3:
+                if freach.status.value == "dead_code":
+                    negative_evidences.append(
+                        self.evidence_engine.create_negative_evidence(
+                            signal="dead_code",
+                            reason=f"Function {freach.name} is dead code (never called)",
+                            penalty=-0.40,
+                        )
+                    )
+                elif freach.status.value == "unused":
+                    negative_evidences.append(
+                        self.evidence_engine.create_negative_evidence(
+                            signal="unused_function",
+                            reason=f"Function {freach.name} is defined but never referenced",
+                            penalty=-0.30,
+                        )
+                    )
+                elif freach.status.value == "test_only":
+                    negative_evidences.append(
+                        self.evidence_engine.create_negative_evidence(
+                            signal="test_only",
+                            reason=f"Function {freach.name} is only called from tests",
+                            penalty=-0.20,
+                        )
+                    )
+                elif freach.status.value == "deprecated":
+                    negative_evidences.append(
+                        self.evidence_engine.create_negative_evidence(
+                            signal="deprecated",
+                            reason=f"Function {freach.name} is marked deprecated",
+                            penalty=-0.15,
+                        )
+                    )
+                elif freach.is_entry_point:
+                    positive_evidences.append(
+                        self.evidence_engine.create_evidence(
+                            evidence_type=EvidenceType.CONTEXT_AUTH,
+                            signal="entry_point",
+                            strength=EvidenceStrength.STRONG,
+                            reason=f"Function {freach.name} is an entry point",
+                            contribution=0.80,
+                        )
+                    )
+                elif freach.status.value == "reachable":
+                    positive_evidences.append(
+                        self.evidence_engine.create_evidence(
+                            evidence_type=EvidenceType.CONTEXT_AUTH,
+                            signal="reachable",
+                            strength=EvidenceStrength.MODERATE,
+                            reason=f"Function {freach.name} is reachable from entry points",
+                            contribution=0.60,
+                        )
+                    )
+                break
 
     def _validate_context(
         self,

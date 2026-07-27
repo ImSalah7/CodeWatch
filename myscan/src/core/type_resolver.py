@@ -312,7 +312,28 @@ class TypeResolver:
                 for item in node.body:
                     if isinstance(item, (ast.FunctionDef, ast.AsyncFunctionDef)):
                         methods.add(item.name)
+                        if item.args.args:
+                            first_arg = item.args.args[0].arg
+                            if first_arg in ("self", "cls"):
+                                self._variable_types[first_arg] = node.name
                 self._class_methods[node.name] = methods
+
+                bases = []
+                for base in node.bases:
+                    if isinstance(base, ast.Name):
+                        bases.append(base.id)
+                    elif isinstance(base, ast.Attribute):
+                        parts = []
+                        n = base
+                        while isinstance(n, ast.Attribute):
+                            parts.append(n.attr)
+                            n = n.value
+                        if isinstance(n, ast.Name):
+                            parts.append(n.id)
+                        parts.reverse()
+                        bases.append(".".join(parts))
+                if bases:
+                    self._class_methods[node.name + ".__bases__"] = set(bases)
 
     def _visit_function_definitions(self, tree: ast.Module) -> None:
         for node in ast.walk(tree):
@@ -327,17 +348,72 @@ class TypeResolver:
                         type_name = self._infer_type(node.value)
                         if type_name:
                             self._variable_types[target.id] = type_name
+            elif isinstance(node, ast.AnnAssign):
+                if isinstance(node.target, ast.Name) and node.annotation:
+                    ann = self._get_annotation_name(node.annotation)
+                    if ann:
+                        self._variable_types[node.target.id] = ann
+
+    def _get_annotation_name(self, annotation: ast.expr) -> Optional[str]:
+        if isinstance(annotation, ast.Name):
+            return annotation.id
+        if isinstance(annotation, ast.Attribute):
+            parts = []
+            node = annotation
+            while isinstance(node, ast.Attribute):
+                parts.append(node.attr)
+                node = node.value
+            if isinstance(node, ast.Name):
+                parts.append(node.id)
+            parts.reverse()
+            return ".".join(parts)
+        if isinstance(annotation, ast.Subscript):
+            base = self._get_annotation_name(annotation.value)
+            if base == "list":
+                inner = self._get_annotation_name(annotation.slice)
+                return f"list[{inner}]" if inner else "list"
+            if base == "dict":
+                return "dict"
+            if base == "Optional":
+                inner = self._get_annotation_name(annotation.slice)
+                return inner or "Optional"
+            return base
+        if isinstance(annotation, ast.Constant):
+            return str(annotation.value)
+        return None
 
     def _infer_type(self, value: ast.expr) -> Optional[str]:
         if isinstance(value, ast.Call):
             if isinstance(value.func, ast.Name):
                 return value.func.id
             elif isinstance(value.func, ast.Attribute):
-                return value.func.attr
+                parts = []
+                node = value.func
+                while isinstance(node, ast.Attribute):
+                    parts.append(node.attr)
+                    node = node.value
+                if isinstance(node, ast.Name):
+                    parts.append(node.id)
+                parts.reverse()
+                return ".".join(parts)
         if isinstance(value, ast.Name):
             return self._variable_types.get(value.id)
         if isinstance(value, ast.Attribute):
             if isinstance(value.value, ast.Name):
                 base = self._variable_types.get(value.value.id, value.value.id)
                 return f"{base}.{value.attr}"
+        if isinstance(value, ast.List):
+            return "list"
+        if isinstance(value, ast.Dict):
+            return "dict"
+        if isinstance(value, ast.Set):
+            return "set"
+        if isinstance(value, ast.Tuple):
+            return "tuple"
+        if isinstance(value, ast.Constant):
+            return type(value.value).__name__
+        if isinstance(value, ast.JoinedStr):
+            return "str"
+        if isinstance(value, ast.ListComp):
+            return "list"
         return None

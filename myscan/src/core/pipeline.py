@@ -33,6 +33,7 @@ from .symbol_table import build_symbol_table, SymbolTable
 from .reachability import analyze_reachability, ReachabilityStatus
 from .root_cause import generate_root_cause, enrich_finding_with_root_cause
 from .code_context import ensure_code_snippet, get_code_context
+from .import_resolver import build_import_table, ImportResolutionResult
 
 
 @dataclass
@@ -234,6 +235,8 @@ class AnalysisPipeline:
 
         symbol_table = build_symbol_table(repo_path, file_contents)
 
+        import_resolution = build_import_table(file_contents, repo_path)
+
         reachability_result = analyze_reachability(
             file_contents,
             include_tests=self.include_tests,
@@ -282,6 +285,8 @@ class AnalysisPipeline:
         result.findings_before_dedup = len(all_enriched)
 
         if self.validation_pipeline:
+            self.validation_pipeline.set_import_resolution(import_resolution)
+            self.validation_pipeline.set_reachability(reachability_result)
             validated: list[EnrichedFinding] = []
             for ef in all_enriched:
                 finding_dict = {

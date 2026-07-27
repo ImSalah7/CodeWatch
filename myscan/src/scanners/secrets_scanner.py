@@ -52,6 +52,35 @@ NOT_LITERAL_PATTERNS = [
     re.compile(r'(?i)\bgetattr\s*\('),
     re.compile(r'(?i)\bcollections\.\w+'),
     re.compile(r'(?i)\bdict\s*\('),
+    re.compile(r'(?i)\bload_dotenv\s*\('),
+    re.compile(r'(?i)\bdotenv\s*\('),
+    re.compile(r'(?i)\bdecouple\s*\('),
+    re.compile(r'(?i)\bclick\.prompt\s*\('),
+    re.compile(r'(?i)\bclick\.option\s*\('),
+    re.compile(r'(?i)\bargparse\b'),
+    re.compile(r'(?i)\benviron\.get\s*\('),
+]
+
+PLACEHOLDER_PATTERNS = [
+    re.compile(r'(?i)^(?:your[_-]?)?(?:password|secret|key|token|api[_-]?key)[_-]?(?:here|goes|placeholder|example|xxxx|xxxxx|changeme|default|todo|fixme)$'),
+    re.compile(r'(?i)^(?:xxx+|changeme|password|secret|placeholder|example|sample|test|dummy|mock|fake|123456|admin|root)$'),
+    re.compile(r'(?i)^(?:replace[_-]?(?:with|this|your)|insert[_-]?(?:your|this)|enter[_-]?(?:your|this))'),
+    re.compile(r'(?i)^<.*>$'),
+    re.compile(r'^\*{8,}$'),
+    re.compile(r'^-{8,}$'),
+    re.compile(r'^(?:TODO|FIXME|HACK|XXX|CHANGEME)'),
+]
+
+COMMENT_LINE_PATTERNS = [
+    re.compile(r'^\s*(?:#|//|/\*|\*|;|--)\s*'),
+    re.compile(r'^\s*(?:>>>|In\s*\[\d+\]:)'),
+]
+
+LDAP_FLAGS = {"ldap", "ldaps", "simple", "none", "external", "digest-md5", "gssapi", "external"}
+
+CONFIG_DEFAULT_PATTERNS = [
+    re.compile(r'(?i)^(?:default|example|sample|demo|test|dev|local)[-_]?'),
+    re.compile(r'(?i)[-_]?(?:default|example|sample|demo|test|dev|local)$'),
 ]
 
 
@@ -242,10 +271,33 @@ class SecretsScanner(BaseScanner):
 
     def _adjust_confidence(self, base: float, line: str) -> float:
         lower = line.lower()
+        stripped = line.strip()
+
+        for pattern in PLACEHOLDER_PATTERNS:
+            val_match = re.search(r'[=:]\s*[\'"]?([^\'"\s]+)', stripped)
+            if val_match and pattern.match(val_match.group(1)):
+                return base * 0.15
+
+        for pattern in CONFIG_DEFAULT_PATTERNS:
+            var_match = re.match(r'(?i)\s*(\w+)\s*[=:]', stripped)
+            if var_match and pattern.match(var_match.group(1)):
+                return base * 0.2
+
+        val_match = re.search(r'[=:]\s*[\'"]([^\'"]+)[\'"]', stripped)
+        if val_match:
+            val = val_match.group(1)
+            if val.lower() in LDAP_FLAGS:
+                return base * 0.1
+            if val.lower() in ("true", "false", "1", "0", "yes", "no", "none", "null", "empty", "undefined"):
+                return base * 0.1
+            if len(val) <= 2:
+                return base * 0.1
+
         if any(x in lower for x in ["example", "sample", "test", "mock", "dummy", "placeholder", "xxx"]):
             return base * 0.3
-        if any(x in lower for x in ["TODO", "FIXME", "HACK"]):
+        if "TODO" in line or "FIXME" in line or "HACK" in line:
             return base * 0.5
+
         return base
 
     def _extract_password_value(self, line: str) -> str:
@@ -273,27 +325,33 @@ class SecretsScanner(BaseScanner):
             stripped = line.strip()
             if stripped.startswith("#") or stripped.startswith("//"):
                 continue
-            matches = re.findall(r'["\']([A-Za-z0-9+/=\-_]{32,80})["\']', line)
-            for match in matches:
-                entropy = self._entropy(match)
-                if entropy > 4.5 and not match.isupper() and not match.islower() and not match.isdigit():
-                    if any(c in match for c in "ABCDEFGHIJKLMNOPQRSTUVWXYZ"):
-                        if any(c in match for c in "0123456789"):
-                            findings.append(Finding(
-                                rule_id="SEC_HIGH_ENTROPY",
-                                title="High-Entropy String",
-                                description=f"String has entropy {entropy:.1f}/8.0, may be a secret.",
-                                severity=Severity.MEDIUM,
-                                confidence=min(entropy / 8.0, 0.7),
-                                category=FindingCategory.SECRET,
-                                language=lang,
-                                location=CodeLocation(file_path=file_path, line=i, code_snippet=line.strip()),
-                                cwe="CWE-798",
-                                fix_suggestion="Verify if this is a secret. If so, move to environment variables.",
-                                tags=["secret", "entropy"],
-                                raw_secret=match,
-                            ))
-                            break
+            for pattern in COMMENT_LINE_PATTERNS:
+                if pattern.match(stripped):
+                    break
+            else:
+                matches = re.findall(r'["\']([A-Za-z0-9+/=\-_]{32,80})["\']', line)
+                for match in matches:
+                    entropy = self._entropy(match)
+                    if entropy > 4.5 and not match.isupper() and not match.islower() and not match.isdigit():
+                        if any(c in match for c in "ABCDEFGHIJKLMNOPQRSTUVWXYZ"):
+                            if any(c in match for c in "0123456789"):
+                                if match == match[::-1]:
+                                    continue
+                                findings.append(Finding(
+                                    rule_id="SEC_HIGH_ENTROPY",
+                                    title="High-Entropy String",
+                                    description=f"String has entropy {entropy:.1f}/8.0, may be a secret.",
+                                    severity=Severity.MEDIUM,
+                                    confidence=min(entropy / 8.0, 0.7),
+                                    category=FindingCategory.SECRET,
+                                    language=lang,
+                                    location=CodeLocation(file_path=file_path, line=i, code_snippet=line.strip()),
+                                    cwe="CWE-798",
+                                    fix_suggestion="Verify if this is a secret. If so, move to environment variables.",
+                                    tags=["secret", "entropy"],
+                                    raw_secret=match,
+                                ))
+                                break
         return findings
 
     def _entropy(self, s: str) -> float:

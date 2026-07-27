@@ -13,8 +13,22 @@ Generates code transformation suggestions for each vulnerability type:
 from __future__ import annotations
 
 import re
+import difflib
 from dataclasses import dataclass, field
 from typing import Optional
+
+
+RISK_REDUCTION_ESTIMATES = {
+    "sql_injection": 0.95,
+    "command_injection": 0.90,
+    "code_injection": 0.85,
+    "xss": 0.80,
+    "hardcoded_secret": 0.90,
+    "path_traversal": 0.85,
+    "deserialization": 0.90,
+    "template_injection": 0.85,
+    "call_graph_vulnerability": 0.50,
+}
 
 
 @dataclass
@@ -28,6 +42,12 @@ class FixSuggestion:
     references: list[str] = field(default_factory=list)
     effort: str = "low"
     breaking_change: bool = False
+    unified_diff: str = ""
+    risk_reduction: float = 0.0
+
+    def __post_init__(self):
+        if not self.unified_diff and self.before_code and self.after_code:
+            self.unified_diff = generate_unified_diff(self.before_code, self.after_code)
 
 
 @dataclass
@@ -204,6 +224,7 @@ def generate_fix(category: str, code_snippet: str = "",
             confidence=fix.confidence,
             references=_get_references(category),
             effort=_estimate_effort(category),
+            risk_reduction=estimate_risk_reduction(category, fix.confidence),
         ))
 
     if not suggestions:
@@ -297,3 +318,23 @@ def _estimate_effort(category: str) -> str:
         "deserialization": "low",
     }
     return effort_map.get(category, "medium")
+
+
+def generate_unified_diff(before_code: str, after_code: str, filename: str = "file") -> str:
+    """Generate a unified diff between before and after code."""
+    before_lines = before_code.splitlines(keepends=True)
+    after_lines = after_code.splitlines(keepends=True)
+    diff = difflib.unified_diff(
+        before_lines,
+        after_lines,
+        fromfile=f"a/{filename}",
+        tofile=f"b/{filename}",
+        lineterm="",
+    )
+    return "".join(diff)
+
+
+def estimate_risk_reduction(category: str, confidence: float = 0.8) -> float:
+    """Estimate the risk reduction percentage if the fix is applied."""
+    base_reduction = RISK_REDUCTION_ESTIMATES.get(category, 0.50)
+    return round(base_reduction * confidence, 2)

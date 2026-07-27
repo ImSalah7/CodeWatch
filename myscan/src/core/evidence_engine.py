@@ -27,6 +27,8 @@ class EvidenceType(Enum):
     DEPENDENCY_KNOWN_VULN = "dependency_known_vuln"
     SECRET_CLASSIFIED = "secret_classified"
     CALL_GRAPH_CONNECTED = "call_graph_connected"
+    IMPORT_VERIFIED = "import_verified"
+    CROSS_FILE_TAINT = "cross_file_taint"
 
 
 class EvidenceStrength(Enum):
@@ -51,6 +53,8 @@ EVIDENCE_WEIGHTS: dict[EvidenceType, float] = {
     EvidenceType.DEPENDENCY_KNOWN_VULN: 0.30,
     EvidenceType.SECRET_CLASSIFIED: 0.10,
     EvidenceType.CALL_GRAPH_CONNECTED: 0.10,
+    EvidenceType.IMPORT_VERIFIED: 0.15,
+    EvidenceType.CROSS_FILE_TAINT: 0.20,
 }
 
 NEGATIVE_EVIDENCE_PENALTIES: dict[str, float] = {
@@ -270,9 +274,12 @@ class EvidenceEngine:
 
     def _determine_verification_level(self, evidences: list[Evidence]) -> str:
         types = set(e.evidence_type for e in evidences if e.strength != EvidenceStrength.NEGATIVE)
-        if len(types) >= 4:
+        strong_count = sum(1 for e in evidences if e.strength == EvidenceStrength.STRONG and e.evidence_type in types)
+        if len(types) >= 5 and strong_count >= 3:
             return "fully_verified"
-        if len(types) >= 2:
+        if len(types) >= 4:
+            return "highly_verified"
+        if len(types) >= 3:
             return "partially_verified"
         if len(types) >= 1:
             return "single_evidence"
