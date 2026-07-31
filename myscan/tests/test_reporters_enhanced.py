@@ -1,17 +1,27 @@
 """Tests for enterprise reporters, fix generator, and AI explainer."""
 
-import pytest
 import json
-from src.core.fix_generator import (
-    generate_fix, generate_secure_alternative, FixSuggestion, CodeTransform,
-    SQL_INJECTION_FIXES, COMMAND_INJECTION_FIXES, EVAL_EXEC_FIXES,
-)
+
+from src import __version__
 from src.ai.explainer import (
-    explain_finding, explain_taint_flow, get_severity_explanation,
-    FindingExplanation, CATEGORY_EXPLANATIONS,
+    CATEGORY_EXPLANATIONS,
+    FindingExplanation,
+    explain_finding,
+    explain_taint_flow,
+    get_severity_explanation,
+)
+from src.core.fix_generator import (
+    generate_fix,
+    generate_secure_alternative,
 )
 from src.core.models import (
-    Finding, ScanResult, Severity, FindingCategory, Language, CodeLocation, CVSS, OWASPTop10,
+    CVSS,
+    CodeLocation,
+    Finding,
+    FindingCategory,
+    Language,
+    ScanResult,
+    Severity,
 )
 
 
@@ -206,7 +216,7 @@ class TestEnhancedReporters:
         assert sarif["version"] == "2.1.0"
         assert len(sarif["runs"]) == 1
         assert len(sarif["runs"][0]["results"]) == 3
-        assert sarif["runs"][0]["tool"]["driver"]["version"] == "3.0.0"
+        assert sarif["runs"][0]["tool"]["driver"]["version"] == __version__
 
     def test_sarif_reporter_has_cvss(self):
         from src.reporters.sarif import SARIFReporter
@@ -260,7 +270,7 @@ class TestEnhancedReporters:
         json_str = JSONReporter().generate(result)
         data = json.loads(json_str)
         assert data["schemaVersion"] == "3.0.0"
-        assert data["tool"]["version"] == "3.0.0"
+        assert data["tool"]["version"] == __version__
         assert len(data["findings"]) == 3
         assert "scan" in data
         assert "summary" in data

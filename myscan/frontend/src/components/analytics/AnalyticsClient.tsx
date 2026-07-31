@@ -6,7 +6,6 @@ import { getStats, getHistory } from "@/lib/api";
 import { cn, severityColor, timeAgo } from "@/lib/utils";
 import type { Stats, ScanJob } from "@/lib/types";
 import {
-  BarChart3,
   TrendingUp,
   Activity,
   Globe,
@@ -34,12 +33,25 @@ import {
 
 const SEV_ORDER = ["critical", "high", "medium", "low", "info"];
 
-const CustomTooltip = ({ active, payload, label }: any) => {
+interface TooltipEntry {
+  name?: string | number;
+  value?: string | number;
+  color?: string;
+  fill?: string;
+}
+
+interface TooltipProps {
+  active?: boolean;
+  payload?: TooltipEntry[];
+  label?: string | number;
+}
+
+const CustomTooltip = ({ active, payload, label }: TooltipProps) => {
   if (!active || !payload?.length) return null;
   return (
     <div className="glass-panel px-3 py-2 text-xs">
       <p className="text-foreground font-medium mb-1">{label}</p>
-      {payload.map((entry: any, i: number) => (
+      {payload.map((entry, i) => (
         <p key={i} style={{ color: entry.color || entry.fill }} className="font-mono">
           {entry.name}: {entry.value}
         </p>
@@ -97,13 +109,6 @@ export function AnalyticsClient() {
       findings: j.finding_count,
       target: j.target.split(/[/\\]/).pop() || "",
     }));
-
-  const statusData = stats
-    ? [
-        { name: "Completed", value: stats.completed_scans, fill: "#22C55E" },
-        { name: "Failed", value: stats.failed_scans, fill: "#EF4444" },
-      ]
-    : [];
 
   const repoHealth = history.slice(0, 10).map((j) => ({
     name: (j.target.split(/[/\\]/).pop() || "unknown").substring(0, 12),

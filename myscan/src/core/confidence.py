@@ -15,7 +15,6 @@ from __future__ import annotations
 
 from dataclasses import dataclass, field
 from enum import Enum
-from typing import Optional
 
 
 class ConfidenceLevel(Enum):
@@ -234,9 +233,7 @@ def calculate_confidence(
 
 def _adjust_severity(confidence: float) -> str:
     """Suggest severity adjustment based on confidence."""
-    if confidence >= 0.9:
-        return "no_change"
-    elif confidence >= 0.7:
+    if confidence >= 0.9 or confidence >= 0.7:
         return "no_change"
     elif confidence >= 0.4:
         return "reduce_one_level"

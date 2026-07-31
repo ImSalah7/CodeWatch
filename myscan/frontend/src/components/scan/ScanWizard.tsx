@@ -17,12 +17,11 @@ import {
   GitBranch,
   GitPullRequest,
   Clock,
-  Eye,
-  EyeOff,
   Sliders,
   Globe,
 } from "lucide-react";
 import { startScan, getScanStatus, subscribeToScanEvents, cancelScan, pauseScan, resumeScan } from "@/lib/api";
+import type { Finding, ScanJob, ScanResult } from "@/lib/types";
 import { cn } from "@/lib/utils";
 import { SeverityBadge } from "@/components/ui/SeverityBadge";
 
@@ -98,11 +97,11 @@ export function ScanWizard() {
   });
   const [scanning, setScanning] = useState(false);
   const scanningRef = useRef(false);
-  const [result, setResult] = useState<any>(null);
+  const [result, setResult] = useState<ScanJob | null>(null);
   const [error, setError] = useState("");
   const [progress, setProgress] = useState(0);
   const [jobId, setJobId] = useState("");
-  const [liveFindings, setLiveFindings] = useState<any[]>([]);
+  const [liveFindings, setLiveFindings] = useState<Finding[]>([]);
   const [currentFile, setCurrentFile] = useState("");
   const [scanPhase, setScanPhase] = useState("");
   const [paused, setPaused] = useState(false);
@@ -150,7 +149,7 @@ export function ScanWizard() {
           if (typeof d.phase === "string" && d.phase) setScanPhase(d.phase);
         },
         onFinding: (d) => {
-          const f = d.finding as any;
+          const f = d.finding as Finding | undefined;
           if (f) {
             setLiveFindings((prev) => [f, ...prev].slice(0, 20));
             setSeverityLive((prev) => {
@@ -182,7 +181,34 @@ export function ScanWizard() {
               const status = await getScanStatus(res.job_id);
               setResult(status);
             } catch {
-              setResult({ job_id: res.job_id, status: "completed", result: { summary: d.summary } });
+              const data = d as Partial<ScanResult>;
+              const summary = {
+                total_findings: data.total_findings ?? 0,
+                security_findings: data.security_findings ?? 0,
+                quality_findings: data.quality_findings ?? 0,
+                secret_findings: data.secret_findings ?? 0,
+                risk_score: data.risk_score ?? 0,
+                grade: data.grade ?? "N/A",
+                severity_counts: data.severity_counts ?? {},
+                files_scanned: data.files_scanned ?? 0,
+                lines_scanned: data.lines_scanned ?? 0,
+                languages: data.languages ?? [],
+                scan_duration: data.scan_duration ?? 0,
+              };
+              setResult({
+                job_id: res.job_id,
+                status: "completed",
+                target: config.target,
+                enterprise: config.enterprise,
+                started_at: new Date().toISOString(),
+                completed_at: new Date().toISOString(),
+                finding_count: summary.total_findings,
+                result: {
+                  ...summary,
+                  findings: data.findings ?? [],
+                  summary,
+                },
+              });
             }
             setScanning(false);
           }, 300);
@@ -218,8 +244,8 @@ export function ScanWizard() {
         }
       };
       setTimeout(poll, remote ? 2000 : 500);
-    } catch (e: any) {
-      setError(e.message || "Failed to start scan");
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Failed to start scan");
       setScanning(false);
       scanningRef.current = false;
     }
@@ -723,12 +749,12 @@ export function ScanWizard() {
                     ))}
                   </div>
 
-                  {result.result?.findings?.length > 0 && (
+                  {(result.result?.findings?.length ?? 0) > 0 && (
                     <div className="space-y-2 max-h-64 overflow-y-auto">
                       <p className="text-xs font-medium text-muted uppercase tracking-wider">
                         Top Findings
                       </p>
-                      {result.result.findings.slice(0, 5).map((f: any, i: number) => (
+                      {result?.result?.findings?.slice(0, 5).map((f, i) => (
                         <div
                           key={i}
                           className="flex items-start gap-3 p-3 rounded-lg bg-surface border border-border"

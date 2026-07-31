@@ -1,7 +1,6 @@
 """Tests for secrets scanner."""
 
-import pytest
-from src.core.models import Language, FindingCategory
+from src.core.models import FindingCategory, Language
 from src.scanners.secrets_scanner import SecretsScanner
 
 

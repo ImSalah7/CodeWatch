@@ -15,9 +15,8 @@ import json
 import os
 import sqlite3
 from contextlib import closing
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from pathlib import Path
-from typing import Optional
 
 # --------------------------------------------------------------------------
 # Location & schema
@@ -114,7 +113,7 @@ CREATE INDEX IF NOT EXISTS idx_scans_started ON scans(started_at);
 """
 
 
-def init_store(db_path: Optional[str] = None) -> None:
+def init_store(db_path: str | None = None) -> None:
     """Create the schema if needed and record the resolved database path."""
     global _db_path
     _db_path = db_path or _env_db_path()
@@ -155,7 +154,7 @@ def _connect() -> sqlite3.Connection:
 # --------------------------------------------------------------------------
 
 def _utcnow() -> str:
-    return datetime.now(timezone.utc).isoformat()
+    return datetime.now(UTC).isoformat()
 
 
 def finding_row_to_dict(row) -> dict:
@@ -317,8 +316,8 @@ def save_scan(
     finding_count: int,
     secret_display: str,
     is_remote: bool,
-    result_json: Optional[str] = None,
-    summary_json: Optional[str] = None,
+    result_json: str | None = None,
+    summary_json: str | None = None,
 ) -> None:
     with closing(_connect()) as conn:
         conn.execute(
@@ -369,7 +368,7 @@ def save_findings(scan_id: str, findings: list[dict]) -> None:
         conn.commit()
 
 
-def get_scan(job_id: str) -> Optional[dict]:
+def get_scan(job_id: str) -> dict | None:
     """Return a scan record (with result parsed) or None."""
     with closing(_connect()) as conn:
         row = conn.execute("SELECT * FROM scans WHERE job_id = ?", (job_id,)).fetchone()
@@ -428,7 +427,7 @@ _SORT_COLUMNS: dict[str, str] = {
 
 
 def get_findings(
-    scan_id: Optional[str] = None,
+    scan_id: str | None = None,
     category: str = "",
     severity: str = "",
     rule_id: str = "",
@@ -518,7 +517,7 @@ def get_findings(
     return int(total), [finding_row_to_dict(r) for r in rows]
 
 
-def get_finding_by_fingerprint(fingerprint: str) -> Optional[dict]:
+def get_finding_by_fingerprint(fingerprint: str) -> dict | None:
     """Search a finding across all scans; enrich with scan metadata."""
     with closing(_connect()) as conn:
         row = conn.execute(

@@ -10,7 +10,6 @@ import ast
 import os
 from collections import deque
 from dataclasses import dataclass, field
-from typing import Optional, Union
 
 ENTRY_POINT_PATTERNS = {
     "function_names": {
@@ -172,7 +171,7 @@ class CallGraph:
     def _is_deprecated(self, source: str) -> bool:
         return any(marker.lower() in source.lower() for marker in DEPRECATED_MARKERS)
 
-    def _get_decorator_name(self, node: ast.expr) -> Optional[str]:
+    def _get_decorator_name(self, node: ast.expr) -> str | None:
         if isinstance(node, ast.Name):
             return node.id
         if isinstance(node, ast.Attribute):
@@ -201,7 +200,7 @@ class CallGraph:
                     return True
         return False
 
-    def _resolve_callee_name(self, node: ast.expr) -> Optional[str]:
+    def _resolve_callee_name(self, node: ast.expr) -> str | None:
         if isinstance(node, ast.Name):
             return node.id
         if isinstance(node, ast.Attribute):
@@ -220,13 +219,13 @@ class CallGraph:
         imports: list[str] = []
         for node in ast.walk(tree):
             if isinstance(node, ast.Import):
-                for alias in node.names:
-                    imports.append(alias.asname or alias.name)
+                imports.extend(alias.asname or alias.name for alias in node.names)
             elif isinstance(node, ast.ImportFrom):
                 module = node.module or ""
-                for alias in node.names:
-                    full = f"{module}.{alias.name}" if module else alias.name
-                    imports.append(alias.asname or full)
+                imports.extend(
+                    alias.asname or (f"{module}.{alias.name}" if module else alias.name)
+                    for alias in node.names
+                )
         return imports
 
     def _scan_for_user_input(self, tree: ast.Module) -> bool:
@@ -262,10 +261,7 @@ class CallGraph:
     def _is_dangerous_call(self, name: str) -> bool:
         if name in DANGEROUS_CALLS:
             return True
-        for dangerous in DANGEROUS_CALLS:
-            if name.endswith("." + dangerous):
-                return True
-        return False
+        return any(name.endswith("." + dangerous) for dangerous in DANGEROUS_CALLS)
 
     def _extract_functions(
         self,
@@ -299,7 +295,7 @@ class CallGraph:
 
     def _analyze_function(
         self,
-        node: Union[ast.FunctionDef, ast.AsyncFunctionDef],
+        node: ast.FunctionDef | ast.AsyncFunctionDef,
         file_path: str,
         is_test: bool,
     ) -> FunctionNode:
@@ -330,7 +326,7 @@ class CallGraph:
             has_dangerous_sink=has_dangerous_sink,
         )
 
-    def _extract_callees(self, node: Union[ast.FunctionDef, ast.AsyncFunctionDef]) -> list[str]:
+    def _extract_callees(self, node: ast.FunctionDef | ast.AsyncFunctionDef) -> list[str]:
         callees: list[str] = []
         for child in ast.walk(node):
             if isinstance(child, ast.Call):
@@ -339,7 +335,7 @@ class CallGraph:
                     callees.append(callee_name)
         return callees
 
-    def _function_has_user_input(self, node: Union[ast.FunctionDef, ast.AsyncFunctionDef]) -> bool:
+    def _function_has_user_input(self, node: ast.FunctionDef | ast.AsyncFunctionDef) -> bool:
         for child in ast.walk(node):
             if isinstance(child, ast.Call):
                 name = self._resolve_callee_name(child.func)
@@ -353,7 +349,7 @@ class CallGraph:
                     return True
         return False
 
-    def _function_has_dangerous_sink(self, node: Union[ast.FunctionDef, ast.AsyncFunctionDef]) -> bool:
+    def _function_has_dangerous_sink(self, node: ast.FunctionDef | ast.AsyncFunctionDef) -> bool:
         for child in ast.walk(node):
             if isinstance(child, ast.Call):
                 name = self._resolve_callee_name(child.func)
@@ -400,7 +396,7 @@ class CallGraph:
 
         return edges
 
-    def _find_function_key(self, name: str, current_file: str) -> Optional[str]:
+    def _find_function_key(self, name: str, current_file: str) -> str | None:
         direct = self._make_key(current_file, name)
         if direct in self._functions:
             return direct
@@ -450,9 +446,9 @@ class CallGraph:
                     continue
                 file_path = os.path.join(root, filename)
                 try:
-                    with open(file_path, "r", encoding="utf-8", errors="replace") as f:
+                    with open(file_path, encoding="utf-8", errors="replace") as f:
                         content = f.read()
-                except (OSError, IOError):
+                except OSError:
                     continue
                 normalized = file_path.replace("\\", "/")
                 self.analyze_file(normalized, content)
@@ -472,7 +468,7 @@ class CallGraph:
                 if self._find_function_key(callee_name, fn.file_path) is not None:
                     continue
                 base_name = callee_name.rsplit(".", 1)[-1] if "." in callee_name else callee_name
-                for key, target_fn in self._functions.items():
+                for target_fn in self._functions.values():
                     if target_fn.name == base_name:
                         edge = CallEdge(
                             caller=fn.name,
@@ -517,7 +513,7 @@ class CallGraph:
                         result.append(node)
         return result
 
-    def _find_function_node(self, name: str, current_file: str) -> Optional[FunctionNode]:
+    def _find_function_node(self, name: str, current_file: str) -> FunctionNode | None:
         base_name = name.rsplit(".", 1)[-1] if "." in name else name
         for fn in self._functions.values():
             if fn.name == name and fn.file_path == current_file:
@@ -534,12 +530,11 @@ class CallGraph:
                 continue
             callee_key = self._find_callee_key(edge)
             caller_key = self._make_key(edge.caller_file, edge.caller)
-            if callee_key and callee_key in adjacency:
-                if caller_key not in adjacency[callee_key]:
-                    adjacency[callee_key].append(caller_key)
+            if callee_key and callee_key in adjacency and caller_key not in adjacency[callee_key]:
+                adjacency[callee_key].append(caller_key)
         return adjacency
 
-    def _find_callee_key(self, edge: CallEdge) -> Optional[str]:
+    def _find_callee_key(self, edge: CallEdge) -> str | None:
         direct = self._make_key(edge.callee_file, edge.callee) if edge.callee_file else None
         if direct and direct in self._functions:
             return direct
@@ -556,9 +551,13 @@ class CallGraph:
                 continue
             caller_key = self._make_key(edge.caller_file, edge.caller)
             callee_key = self._find_callee_key(edge)
-            if caller_key in adjacency and callee_key and callee_key in adjacency:
-                if callee_key not in adjacency[caller_key]:
-                    adjacency[caller_key].append(callee_key)
+            if (
+                caller_key in adjacency
+                and callee_key
+                and callee_key in adjacency
+                and callee_key not in adjacency[caller_key]
+            ):
+                adjacency[caller_key].append(callee_key)
         return adjacency
 
     def _bfs_from_entries(
@@ -570,10 +569,7 @@ class CallGraph:
         if not entry_keys:
             return set()
 
-        if reverse:
-            adj = self._build_reverse_adjacency()
-        else:
-            adj = adjacency
+        adj = self._build_reverse_adjacency() if reverse else adjacency
 
         visited: set[str] = set()
         queue: deque[str] = deque()
@@ -596,10 +592,7 @@ class CallGraph:
         adjacency = self._build_adjacency()
         reachable = self._bfs_from_entries(adjacency)
 
-        for key, fn in self._functions.items():
-            if fn.name == function_name and key in reachable:
-                return True
-        return False
+        return any(fn.name == function_name and key in reachable for key, fn in self._functions.items())
 
     def get_reachability(self, function_name: str) -> str:
         target_keys = [key for key, fn in self._functions.items() if fn.name == function_name]
@@ -633,14 +626,14 @@ class CallGraph:
             content = self._file_cache[file_path]
         else:
             try:
-                with open(file_path, "r", encoding="utf-8", errors="replace") as f:
+                with open(file_path, encoding="utf-8", errors="replace") as f:
                     content = f.read()
                 self._file_cache[file_path] = content
-            except (OSError, IOError):
+            except OSError:
                 return False
 
         lines = content.splitlines()
-        start = max(0, fn.line_start - 1)
+        max(0, fn.line_start - 1)
         end = min(len(lines), fn.line_start + 2)
         header = "\n".join(lines[:end])
         return any(marker.lower() in header.lower() for marker in AUTO_GENERATED_PATTERNS)
@@ -651,10 +644,10 @@ class CallGraph:
             content = self._file_cache[file_path]
         else:
             try:
-                with open(file_path, "r", encoding="utf-8", errors="replace") as f:
+                with open(file_path, encoding="utf-8", errors="replace") as f:
                     content = f.read()
                 self._file_cache[file_path] = content
-            except (OSError, IOError):
+            except OSError:
                 return False
 
         lines = content.splitlines()
@@ -671,7 +664,7 @@ class CallGraph:
         if not target_keys:
             return []
 
-        parent: dict[str, Optional[str]] = {key: None for key in self._functions}
+        parent: dict[str, str | None] = dict.fromkeys(self._functions)
         visited: set[str] = set()
         queue: deque[str] = deque()
 
@@ -680,7 +673,7 @@ class CallGraph:
                 queue.append(key)
                 visited.add(key)
 
-        found_key: Optional[str] = None
+        found_key: str | None = None
         while queue:
             current = queue.popleft()
             if current in target_keys:
@@ -702,7 +695,7 @@ class CallGraph:
             return []
 
         path: list[str] = []
-        current: Optional[str] = found_key
+        current: str | None = found_key
         while current is not None:
             fn = self._functions.get(current)
             if fn:

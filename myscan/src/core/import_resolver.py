@@ -21,7 +21,6 @@ import re
 from dataclasses import dataclass, field
 from enum import Enum
 from pathlib import Path
-from typing import Optional
 
 
 class ImportType(Enum):
@@ -102,8 +101,8 @@ STDLIB_PYTHON = {
     "contextlib", "textwrap", "string", "struct", "codecs", "locale",
     "gettext", "signal", "mmap", "ctypes", "zipfile", "tarfile", "shutil",
     "tempfile", "glob", "fnmatch", "linecache", "pickle", "shelve",
-    "dbm", "sqlite3", "xmlrpc", "ftplib", "smtplib", "imaplib",
-    "poplib", "telnetlib", "uuid", "platform", "signal", "array",
+    "dbm", "xmlrpc", "ftplib", "smtplib", "imaplib",
+    "poplib", "telnetlib", "uuid", "platform", "array",
     "queue", "heapq", "bisect", "weakref", "types", "inspect",
     "traceback", "warnings", "atexit", "gc", "site", "cmd",
     "pdb", "profile", "timeit", "trace", "dis", "pickletools",
@@ -167,10 +166,7 @@ def _resolve_relative_import(
 
     base_parts = Path(source_rel).parts
 
-    if level > len(base_parts):
-        base_parts = ()
-    else:
-        base_parts = base_parts[: len(base_parts) - level + 1]
+    base_parts = () if level > len(base_parts) else base_parts[:len(base_parts) - level + 1]
 
     if module:
         return ".".join(base_parts + (module,))
@@ -181,7 +177,7 @@ def _find_file_for_module(
     module: str,
     file_contents: dict[str, str],
     repo_path: str,
-) -> Optional[str]:
+) -> str | None:
     parts = module.replace(".", "/")
     candidates = [
         os.path.join(repo_path, parts + ".py"),
@@ -197,7 +193,7 @@ def _find_file_for_module(
             return c
 
     for fpath in file_contents:
-        if fpath.endswith(parts + ".py") or fpath.endswith(parts + ".js"):
+        if fpath.endswith((parts + ".py", parts + ".js")):
             return fpath
         if fpath.endswith(parts + ".ts"):
             return fpath
@@ -444,7 +440,7 @@ def resolve_import_alias(
     alias: str,
     source_file: str,
     resolution: ImportResolutionResult,
-) -> Optional[ResolvedImport]:
+) -> ResolvedImport | None:
     """Resolve an import alias to its original definition."""
     key = f"{source_file}::{alias}"
     if key in resolution.resolved:

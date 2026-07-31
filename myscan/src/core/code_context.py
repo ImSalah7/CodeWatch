@@ -13,8 +13,6 @@ Ensures no finding has empty or incorrect code snippets.
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import Optional
-
 
 CONTEXT_LINES = 5
 
@@ -115,7 +113,7 @@ def format_code_for_display(
     parts = []
     idx = 0
 
-    for i, line in enumerate(ctx.before_lines):
+    for _i, line in enumerate(ctx.before_lines):
         ln = ctx.start_line + idx
         parts.append(f"  {ln:>4} | {line}")
         idx += 1
@@ -123,7 +121,7 @@ def format_code_for_display(
     parts.append(f"→ {ctx.highlighted_line:>4} | {ctx.vulnerable_line}")
     idx += 1
 
-    for i, line in enumerate(ctx.after_lines):
+    for _i, line in enumerate(ctx.after_lines):
         ln = ctx.start_line + idx
         parts.append(f"  {ln:>4} | {line}")
         idx += 1
@@ -165,7 +163,7 @@ def extract_sink_context(
     parts = []
     idx = 0
 
-    for i, line in enumerate(ctx.before_lines):
+    for _i, line in enumerate(ctx.before_lines):
         ln = ctx.start_line + idx
         parts.append(f"  {ln:>4} | {line}")
         idx += 1
@@ -174,7 +172,7 @@ def extract_sink_context(
     parts.append(f"→ {ctx.highlighted_line:>4} | {ctx.vulnerable_line}{sink_marker}")
     idx += 1
 
-    for i, line in enumerate(ctx.after_lines):
+    for _i, line in enumerate(ctx.after_lines):
         ln = ctx.start_line + idx
         parts.append(f"  {ln:>4} | {line}")
         idx += 1

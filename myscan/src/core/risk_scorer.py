@@ -6,9 +6,8 @@ and confidence-weighted severity adjustment.
 
 from __future__ import annotations
 
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from enum import Enum
-from typing import Optional
 
 
 class RiskLevel(Enum):
@@ -112,7 +111,6 @@ def calculate_cvss(
     a = CVSS_METRICS["availability"].get(availability, 0.0)
 
     if scope == "U":
-        pr_adjusted = pr
         impact_sub = 6.42 * (c + i + a)
     else:
         impact_sub = max(0.0, 7.52 * (c + i + a - 0.029) - 3.25 * min(1.0, (c + i + a - 0.02) ** 15))
@@ -186,8 +184,8 @@ def assess_risk(
     is_production: bool = True,
     has_taint_path: bool = False,
     user_controlled: bool = False,
-    cvss_overrides: Optional[dict] = None,
-    custom_cvss: Optional[dict] = None,
+    cvss_overrides: dict | None = None,
+    custom_cvss: dict | None = None,
 ) -> RiskAssessment:
     """Perform comprehensive risk assessment."""
     if custom_cvss:

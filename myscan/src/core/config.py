@@ -2,8 +2,7 @@
 
 from __future__ import annotations
 
-from dataclasses import dataclass, field
-from pathlib import Path
+from dataclasses import dataclass
 
 SKIP_DIRS = {
     ".git", "node_modules", "__pycache__", ".venv", "venv", "env",
@@ -25,7 +24,7 @@ SKIP_EXTENSIONS = {
     ".woff", ".woff2", ".ttf", ".eot", ".otf",
     ".min.js", ".min.css", ".map",
     ".lock", ".sum", ".gradle.lockfile",
-    ".jpg", ".mp4", ".mp3", ".wav", ".avi",
+    ".mp4", ".mp3", ".wav", ".avi",
     ".zip", ".tar", ".gz", ".bz2", ".7z", ".rar",
     ".pdf", ".doc", ".docx", ".xls", ".xlsx",
     ".db", ".sqlite", ".sqlite3",

@@ -11,8 +11,6 @@ import sys
 import tempfile
 from pathlib import Path
 
-import pytest
-
 ROOT = Path(__file__).resolve().parents[1]
 FIXTURES = ROOT / "tests" / "fixtures" / "sample_app"
 PYTHON = sys.executable
@@ -284,7 +282,7 @@ def test_ssrf_and_path_allowlist():
 
 
 def test_dependency_and_sbom_endpoints():
-    db = tempfile.mktemp(suffix=".db")
+    tempfile.mktemp(suffix=".db")
     script = r"""
 import sys
 from src.api import app

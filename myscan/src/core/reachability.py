@@ -15,7 +15,6 @@ from __future__ import annotations
 import ast
 from dataclasses import dataclass, field
 from enum import Enum
-from typing import Optional
 
 
 class ReachabilityStatus(Enum):
@@ -200,9 +199,11 @@ def _compute_reachability(
         visited.add(current)
         reachable.add(current)
 
-        for callee in call_graph.get(current, set()):
-            if callee not in visited:
-                queue.append(callee)
+        queue.extend(
+            callee
+            for callee in call_graph.get(current, set())
+            if callee not in visited
+        )
 
     for func_id, (file_path, line) in definitions.items():
         is_called = func_id in called_set
@@ -250,9 +251,8 @@ def get_function_reachability(
 ) -> FunctionReachability:
     """Get reachability for a specific function."""
     for func_id, fr in result.functions.items():
-        if function_name in func_id:
-            if not file_path or fr.file_path == file_path:
-                return fr
+        if function_name in func_id and (not file_path or fr.file_path == file_path):
+            return fr
     return FunctionReachability(
         name=function_name,
         file_path=file_path,

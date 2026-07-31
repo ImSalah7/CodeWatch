@@ -9,7 +9,6 @@ Controls how detected secrets are displayed in reports:
 from __future__ import annotations
 
 import re
-from typing import Optional
 
 from .models import Finding, FindingCategory, SecretDisplayMode
 
@@ -97,7 +96,7 @@ def is_default_credential(secret: str, line: str = "") -> bool:
     for cred in DEFAULT_CREDENTIALS:
         if ":" in cred:
             username, password = cred.split(":", 1)
-            if cleaned == username or cleaned == password:
+            if cleaned in (username, password):
                 return True
     if line:
         lower = line.lower()
@@ -111,9 +110,7 @@ def is_production_secret(rule_id: str, tags: list[str]) -> bool:
     tag_set = set(tags)
     if tag_set & PRODUCTION_SECRET_PATTERNS:
         return True
-    if "entropy" in tag_set:
-        return True
-    return False
+    return "entropy" in tag_set
 
 
 def get_secret_display_value(finding: Finding, mode: SecretDisplayMode = SecretDisplayMode.SMART) -> str:
@@ -198,7 +195,7 @@ def apply_secret_display_mode(findings: list[Finding],
     return findings
 
 
-def get_secret_display_warning(mode: SecretDisplayMode) -> Optional[str]:
+def get_secret_display_warning(mode: SecretDisplayMode) -> str | None:
     """Get a warning message if full secret display is enabled."""
     if mode == SecretDisplayMode.FULL:
         return (

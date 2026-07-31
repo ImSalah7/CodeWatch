@@ -1,16 +1,23 @@
 """Tests for reporters."""
 
+import json
+
 import pytest
+
 from src.core.models import (
-    ScanResult, Finding, Severity, FindingCategory, Language,
-    CodeLocation, CVSS, OWASPTop10,
+    CodeLocation,
+    Finding,
+    FindingCategory,
+    Language,
+    OWASPTop10,
+    ScanResult,
+    Severity,
 )
-from src.reporters.sarif import SARIFReporter
-from src.reporters.html_report import HTMLReporter
 from src.reporters.csv_report import CSVReporter
+from src.reporters.html_report import HTMLReporter
 from src.reporters.json_report import JSONReporter
 from src.reporters.markdown_report import MarkdownReporter
-import json
+from src.reporters.sarif import SARIFReporter
 
 
 @pytest.fixture

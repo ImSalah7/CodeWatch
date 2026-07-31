@@ -6,10 +6,8 @@ Evidence is collected at each pipeline stage and evaluated for validity.
 
 from __future__ import annotations
 
-import math
 from dataclasses import dataclass, field
 from enum import Enum
-from typing import Optional
 
 
 class EvidenceType(Enum):
@@ -172,9 +170,9 @@ class EvidenceEngine:
         signal: str,
         strength: EvidenceStrength,
         reason: str,
-        contribution: Optional[float] = None,
+        contribution: float | None = None,
         source_location: str = "",
-        metadata: Optional[dict] = None,
+        metadata: dict | None = None,
     ) -> Evidence:
         weight = EVIDENCE_WEIGHTS.get(evidence_type, 0.1)
         if contribution is None:
@@ -201,7 +199,7 @@ class EvidenceEngine:
         self,
         signal: str,
         reason: str,
-        penalty: Optional[float] = None,
+        penalty: float | None = None,
         source_location: str = "",
     ) -> Evidence:
         if penalty is None:
@@ -230,10 +228,7 @@ class EvidenceEngine:
                 positive_sum += ev.net_contribution
                 positive_weight_sum += ev.weight
 
-        if positive_weight_sum > 0:
-            normalized_positive = positive_sum / max(positive_weight_sum, 0.01)
-        else:
-            normalized_positive = 0.0
+        normalized_positive = positive_sum / max(positive_weight_sum, 0.01) if positive_weight_sum > 0 else 0.0
 
         negative_sum = sum(abs(e.confidence_contribution) for e in negative_evidences)
 
@@ -273,7 +268,7 @@ class EvidenceEngine:
         )
 
     def _determine_verification_level(self, evidences: list[Evidence]) -> str:
-        types = set(e.evidence_type for e in evidences if e.strength != EvidenceStrength.NEGATIVE)
+        types = {e.evidence_type for e in evidences if e.strength != EvidenceStrength.NEGATIVE}
         strong_count = sum(1 for e in evidences if e.strength == EvidenceStrength.STRONG and e.evidence_type in types)
         if len(types) >= 5 and strong_count >= 3:
             return "fully_verified"
@@ -352,9 +347,6 @@ class EvidenceEngine:
                 raw_score += weight * value
                 total_weight += weight
 
-        if total_weight > 0:
-            confidence = min(1.0, raw_score / total_weight * 1.5)
-        else:
-            confidence = 0.0
+        confidence = min(1.0, raw_score / total_weight * 1.5) if total_weight > 0 else 0.0
 
         return confidence, evidences

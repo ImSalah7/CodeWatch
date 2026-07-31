@@ -3,9 +3,8 @@
 from __future__ import annotations
 
 import re
-from typing import Optional
 
-from ..core.models import Finding, FindingCategory, Language, CodeLocation, Severity
+from ..core.models import CodeLocation, Finding, FindingCategory, Language
 from ..core.rules import ALL_RULES, Rule
 from ..scanners import BaseScanner
 
@@ -33,9 +32,9 @@ class SecurityScanner(BaseScanner):
 
             for i, line in enumerate(lines, 1):
                 stripped = line.strip()
-                if stripped.startswith("#") or stripped.startswith("//"):
+                if stripped.startswith(("#", "//")):
                     continue
-                if stripped.startswith("*") or stripped.startswith("/*"):
+                if stripped.startswith(("*", "/*")):
                     continue
                 match = pattern.search(line)
                 if match:
@@ -86,7 +85,7 @@ class SecurityScanner(BaseScanner):
 
         return findings
 
-    def _validate_match(self, rule: "Rule", line: str) -> bool:
+    def _validate_match(self, rule: Rule, line: str) -> bool:
         """Post-validation to reject false positives a regex cannot express.
 
         For SQL injection (SEC001), a parameterized execute() call such as
@@ -112,11 +111,9 @@ class SecurityScanner(BaseScanner):
             r"(?:\{[^}]*\}|\([^)]*\)|\[[^\]]*\]|self\.\w+|[a-zA-Z_]\w*)\s*\)\s*$",
             line,
         )
-        if param_call:
-            return False
-        return True
+        return not param_call
 
-    def _detect_mechanism(self, rule: "Rule", matched: str) -> str:
+    def _detect_mechanism(self, rule: Rule, matched: str) -> str:
         if rule.id == "SEC001":
             if matched.startswith(("execute", "executemany", "executescript")) and re.search(r"f[\"']", matched):
                 return "f-string interpolation"

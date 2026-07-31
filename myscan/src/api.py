@@ -37,15 +37,14 @@ import re
 import shutil
 import subprocess
 import tempfile
+import threading
 import time
 import uuid
-import threading
 from dataclasses import dataclass
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from pathlib import Path
-from typing import Optional
 
-from flask import Flask, jsonify, request, Response, stream_with_context
+from flask import Flask, Response, jsonify, request, stream_with_context
 
 from . import security as sec
 from . import store
@@ -53,7 +52,7 @@ from .__init__ import __version__
 from .core.config import ScanConfig
 from .core.engine import ScanEngine
 from .core.models import ScanResult
-from .progress import create_tracker, get_tracker, remove_tracker
+from .progress import create_tracker, get_tracker
 
 app = Flask(__name__)
 
@@ -89,7 +88,7 @@ _ALLOWED_SECRET_DISPLAY = ("smart", "masked", "full")
 
 def _load_settings() -> dict:
     try:
-        with open(SETTINGS_FILE, "r", encoding="utf-8") as f:
+        with open(SETTINGS_FILE, encoding="utf-8") as f:
             saved = json.load(f)
         merged = dict(DEFAULT_SETTINGS)
         merged.update(saved)
@@ -116,7 +115,7 @@ class ScanJob:
     enterprise: bool = False
     started_at: str = ""
     completed_at: str = ""
-    result: Optional[ScanResult] = None
+    result: ScanResult | None = None
     error: str = ""
     scan_duration: float = 0.0
     finding_count: int = 0
@@ -425,7 +424,7 @@ def _run_scan_job(job: ScanJob, config: ScanConfig) -> None:
 
         job.result = result
         job.status = "completed"
-        job.completed_at = datetime.now(timezone.utc).isoformat()
+        job.completed_at = datetime.now(UTC).isoformat()
         job.finding_count = len(result.findings)
         job.scan_duration = result.scan_duration
 
@@ -442,7 +441,7 @@ def _run_scan_job(job: ScanJob, config: ScanConfig) -> None:
     except Exception as exc:
         job.status = "failed"
         job.error = str(exc)
-        job.completed_at = datetime.now(timezone.utc).isoformat()
+        job.completed_at = datetime.now(UTC).isoformat()
         t = get_tracker(job.job_id)
         if t:
             t.on_error(str(exc))
@@ -497,7 +496,7 @@ def _get_job(job_id: str):
 def health_check():
     return jsonify({
         "status": "healthy", "version": __version__,
-        "timestamp": datetime.now(timezone.utc).isoformat(),
+        "timestamp": datetime.now(UTC).isoformat(),
         "auth": sec.auth_enabled(),
     })
 
@@ -543,7 +542,7 @@ def start_scan():
     job_id = uuid.uuid4().hex[:12]
     job = ScanJob(
         job_id=job_id, target=scan_target, enterprise=enterprise,
-        started_at=datetime.now(timezone.utc).isoformat(),
+        started_at=datetime.now(UTC).isoformat(),
         secret_display=secret_display, is_remote=is_remote,
     )
 
@@ -915,10 +914,7 @@ def generate_fixes():
     if status != "completed":
         return jsonify({"error": "Scan not completed"}), 400
 
-    if source == "live":
-        findings = [f.to_dict() for f in job.result.findings]
-    else:
-        findings = job["result"].get("findings", [])
+    findings = [f.to_dict() for f in job.result.findings] if source == "live" else job["result"].get("findings", [])
 
     from .core.fix_generator import generate_fix
     fixes = []
@@ -949,14 +945,15 @@ def generate_fixes():
 def get_history():
     limit = _clamp_int(request.args.get("limit", 20), 20, 1, 500)
     records = store.list_scans(limit)
-    history = []
-    for rec in records:
-        history.append({
+    history = [
+        {
             "job_id": rec["job_id"], "target": rec["target"], "status": rec["status"],
             "enterprise": rec["enterprise"], "started_at": rec["started_at"],
             "completed_at": rec["completed_at"], "finding_count": rec["finding_count"],
             "error": rec["error"],
-        })
+        }
+        for rec in records
+    ]
     return jsonify({"history": history, "total": store.count_scans()})
 
 
@@ -1067,7 +1064,7 @@ def generate_sbom():
         return jsonify({"error": f"SBOM generation failed: {exc}"}), 500
 
 
-def create_app(config: Optional[dict] = None) -> Flask:
+def create_app(config: dict | None = None) -> Flask:
     if config:
         app.config.update(config)
     _ensure_settings_file()

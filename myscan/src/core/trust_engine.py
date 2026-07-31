@@ -17,7 +17,6 @@ from __future__ import annotations
 
 from dataclasses import dataclass, field
 from enum import Enum
-from typing import Optional
 
 
 class EvidenceType(Enum):
@@ -127,7 +126,7 @@ class TrustEngine:
         score = engine.calculate()
     """
 
-    def __init__(self, custom_weights: Optional[dict[EvidenceType, float]] = None):
+    def __init__(self, custom_weights: dict[EvidenceType, float] | None = None):
         self._evidences: list[Evidence] = []
         self._weights = dict(EVIDENCE_WEIGHTS)
         if custom_weights:
@@ -155,7 +154,7 @@ class TrustEngine:
         self,
         signal: str,
         reason: str,
-        penalty: Optional[float] = None,
+        penalty: float | None = None,
         source_location: str = "",
     ) -> None:
         if penalty is None:
@@ -191,10 +190,7 @@ class TrustEngine:
                 positive_sum += ev.net_contribution
                 positive_weight_sum += ev.weight
 
-        if positive_weight_sum > 0:
-            normalized_positive = positive_sum / max(positive_weight_sum, 0.01)
-        else:
-            normalized_positive = 0.0
+        normalized_positive = positive_sum / max(positive_weight_sum, 0.01) if positive_weight_sum > 0 else 0.0
 
         raw_score = base_score + normalized_positive - negative_sum
         score = max(0.0, min(1.0, raw_score))
@@ -257,10 +253,11 @@ class TrustEngine:
         return " ".join(parts)
 
     def _build_evidence_summary(self) -> str:
-        verified = []
-        for e in self._evidences:
-            if e.evidence_type != EvidenceType.NEGATIVE and e.confidence_contribution > 0.5:
-                verified.append(e.evidence_type.value.replace("_", " "))
+        verified = [
+            e.evidence_type.value.replace("_", " ")
+            for e in self._evidences
+            if e.evidence_type != EvidenceType.NEGATIVE and e.confidence_contribution > 0.5
+        ]
         if not verified:
             return "Unverified"
         return ", ".join(verified)

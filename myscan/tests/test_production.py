@@ -9,37 +9,56 @@ import json
 import tempfile
 from pathlib import Path
 
-import pytest
-
-from src.core.trust_engine import (
-    TrustEngine, TrustScore, Evidence, EvidenceType,
-    build_trust_from_pipeline, EVIDENCE_WEIGHTS, NEGATIVE_EVIDENCE_PENALTIES,
-)
-from src.core.type_resolver import (
-    TypeResolver, FunctionOrigin, SafetyLevel, CallResolution,
-    KNOWN_DANGEROUS_BUILTINS, STDLIB_MODULES,
-)
-from src.core.file_risk import FileRiskScorer, FileRiskProfile, RiskLevel
-from src.core.function_risk import FunctionRiskScorer, FunctionRiskProfile, FunctionRiskLevel
-from src.core.policy_engine import (
-    PolicyEngine, SecurityPolicy, PolicyCheckResult, PolicyViolation,
+from src.core.config_security import (
+    CONFIG_RULES,
+    ConfigFinding,
+    ConfigSecurityScanner,
+    ConfigSeverity,
+    ConfigType,
 )
 from src.core.dependency_scanner import (
-    DependencyScanner, DependencyScanResult, Dependency, PackageManager,
-    VulnerabilitySeverity, KNOWN_VULNERABILITIES,
+    KNOWN_VULNERABILITIES,
+    Dependency,
+    DependencyScanner,
+    DependencyScanResult,
+    PackageManager,
 )
-from src.core.config_security import (
-    ConfigSecurityScanner, ConfigType, ConfigSeverity, CONFIG_RULES, ConfigFinding,
-)
-from src.core.sbom import SBOMGenerator, SBOMDocument, SBOMComponent
-from src.core.plugin_sdk import (
-    PluginManager, PluginBase, PluginMetadata, ScannerPlugin,
-    RulePlugin, ReporterPlugin,
-)
+from src.core.file_risk import FileRiskScorer, RiskLevel
+from src.core.function_risk import FunctionRiskLevel, FunctionRiskScorer
 from src.core.performance import (
-    ASTCache, IncrementalScanner, ParallelScanner, ScanProgress, ScanMetrics,
+    ASTCache,
+    IncrementalScanner,
+    ParallelScanner,
+    ScanMetrics,
+    ScanProgress,
 )
-
+from src.core.plugin_sdk import (
+    PluginBase,
+    PluginManager,
+    PluginMetadata,
+    ReporterPlugin,
+    RulePlugin,
+    ScannerPlugin,
+)
+from src.core.policy_engine import (
+    PolicyCheckResult,
+    PolicyEngine,
+    SecurityPolicy,
+)
+from src.core.sbom import SBOMGenerator
+from src.core.trust_engine import (
+    EVIDENCE_WEIGHTS,
+    EvidenceType,
+    TrustEngine,
+    build_trust_from_pipeline,
+)
+from src.core.type_resolver import (
+    KNOWN_DANGEROUS_BUILTINS,
+    STDLIB_MODULES,
+    FunctionOrigin,
+    SafetyLevel,
+    TypeResolver,
+)
 
 # ============================================================
 # Trust Engine Tests
@@ -212,7 +231,6 @@ class TestTypeResolver:
 
 import ast
 
-
 # ============================================================
 # File Risk Scorer Tests
 # ============================================================
@@ -226,7 +244,7 @@ class TestFileRiskScorer:
 
     def test_file_with_critical_findings(self):
         scorer = FileRiskScorer()
-        from src.core.models import Finding, Severity, FindingCategory, Language, CodeLocation
+        from src.core.models import CodeLocation, Finding, FindingCategory, Language, Severity
         findings = [
             Finding(rule_id="SEC001", title="SQL Injection", description="SQLi",
                     severity=Severity.CRITICAL, confidence=0.9,
@@ -385,7 +403,7 @@ class TestPolicyEngine:
     def test_check_findings_pass(self):
         policy = SecurityPolicy(max_critical=5, max_high=10)
         engine = PolicyEngine(policy)
-        from src.core.models import Finding, Severity, FindingCategory, Language, CodeLocation
+        from src.core.models import CodeLocation, Finding, FindingCategory, Language, Severity
         findings = [
             Finding(rule_id="SEC001", title="Low", description="Low issue",
                     severity=Severity.LOW, confidence=0.5,
@@ -398,7 +416,7 @@ class TestPolicyEngine:
     def test_check_findings_fail(self):
         policy = SecurityPolicy(max_critical=0)
         engine = PolicyEngine(policy)
-        from src.core.models import Finding, Severity, FindingCategory, Language, CodeLocation
+        from src.core.models import CodeLocation, Finding, FindingCategory, Language, Severity
         findings = [
             Finding(rule_id="SEC001", title="Critical", description="Critical issue",
                     severity=Severity.CRITICAL, confidence=0.9,
@@ -412,7 +430,7 @@ class TestPolicyEngine:
     def test_filter_by_severity(self):
         policy = SecurityPolicy(min_severity="high")
         engine = PolicyEngine(policy)
-        from src.core.models import Finding, Severity, FindingCategory, Language, CodeLocation
+        from src.core.models import CodeLocation, Finding, FindingCategory, Language, Severity
         findings = [
             Finding(rule_id="SEC001", title="High", description="High",
                     severity=Severity.HIGH, confidence=0.8,
@@ -430,7 +448,7 @@ class TestPolicyEngine:
     def test_ignore_rules(self):
         policy = SecurityPolicy(ignored_rules=["SEC001"])
         engine = PolicyEngine(policy)
-        from src.core.models import Finding, Severity, FindingCategory, Language, CodeLocation
+        from src.core.models import CodeLocation, Finding, FindingCategory, Language, Severity
         findings = [
             Finding(rule_id="SEC001", title="Ignored", description="Ignored",
                     severity=Severity.HIGH, confidence=0.8,
@@ -462,7 +480,7 @@ class TestPolicyEngine:
 
     def test_baseline_comparison(self):
         engine = PolicyEngine(SecurityPolicy(fail_on_regression=True))
-        from src.core.models import Finding, Severity, FindingCategory, Language, CodeLocation
+        from src.core.models import CodeLocation, Finding, FindingCategory, Language, Severity
         baseline = [
             Finding(rule_id="SEC001", title="Old", description="Old",
                     severity=Severity.HIGH, confidence=0.8,
@@ -1176,9 +1194,10 @@ def never_called():
         assert reachability in ("dead_code", "test_only", "unreachable")
 
     def test_call_graph_repository(self):
-        from src.core.call_graph import CallGraph
-        import tempfile
         import os
+        import tempfile
+
+        from src.core.call_graph import CallGraph
         cg = CallGraph()
         with tempfile.TemporaryDirectory() as tmpdir:
             app_file = os.path.join(tmpdir, "app.py")
@@ -1191,9 +1210,10 @@ def never_called():
 
 class TestPipelineValidationIntegration:
     def test_pipeline_with_validation(self):
-        from src.core.pipeline import AnalysisPipeline
-        import tempfile
         import os
+        import tempfile
+
+        from src.core.pipeline import AnalysisPipeline
         with tempfile.TemporaryDirectory() as tmpdir:
             app_file = os.path.join(tmpdir, "app.py")
             with open(app_file, "w") as f:
@@ -1215,9 +1235,10 @@ def safe():
             assert isinstance(result.vulnerable_paths, list)
 
     def test_pipeline_without_validation(self):
-        from src.core.pipeline import AnalysisPipeline
-        import tempfile
         import os
+        import tempfile
+
+        from src.core.pipeline import AnalysisPipeline
         with tempfile.TemporaryDirectory() as tmpdir:
             app_file = os.path.join(tmpdir, "app.py")
             with open(app_file, "w") as f:
@@ -1229,7 +1250,7 @@ def safe():
 
 class TestSecretAnalyzerIntegration:
     def test_analyzer_enriches_secret(self):
-        from src.core.models import Finding, Severity, FindingCategory, Language, CodeLocation
+        from src.core.models import CodeLocation, Finding, FindingCategory, Language, Severity
         from src.core.secret_analyzer import SecretAnalyzer
         finding = Finding(
             rule_id="SEC_PASSWORD_ASSIGNMENT",
@@ -1251,7 +1272,7 @@ class TestSecretAnalyzerIntegration:
         assert isinstance(result.recommendations, list)
 
     def test_analyzer_classifies_aws_key(self):
-        from src.core.models import Finding, Severity, FindingCategory, Language, CodeLocation
+        from src.core.models import CodeLocation, Finding, FindingCategory, Language, Severity
         from src.core.secret_analyzer import SecretAnalyzer
         finding = Finding(
             rule_id="SEC_AWS_ACCESS_KEY",
@@ -1272,9 +1293,10 @@ class TestSecretAnalyzerIntegration:
 
 class TestBenchmark:
     def test_run_myscan_local(self):
-        from src.core.benchmark import _run_myscan
-        import tempfile
         import os
+        import tempfile
+
+        from src.core.benchmark import _run_myscan
         with tempfile.TemporaryDirectory() as tmpdir:
             app_file = os.path.join(tmpdir, "app.py")
             with open(app_file, "w") as f:
@@ -1295,10 +1317,10 @@ class TestBenchmark:
         from src.core.benchmark import _normalize_finding_key
         f = {"file": "app.py", "line": 10, "rule_id": "SEC_001"}
         key = _normalize_finding_key(f)
-        assert "app.py:10:SEC_001" == key
+        assert key == "app.py:10:SEC_001"
 
     def test_compute_overlap(self):
-        from src.core.benchmark import _compute_overlap, ToolResult
+        from src.core.benchmark import ToolResult, _compute_overlap
         a = ToolResult(tool_name="a", findings=[
             {"rule_id": "R1", "file": "app.py", "line": 10},
             {"rule_id": "R2", "file": "app.py", "line": 20},
@@ -1311,7 +1333,7 @@ class TestBenchmark:
         assert len(overlap) == 1
 
     def test_compute_unique(self):
-        from src.core.benchmark import _compute_unique, ToolResult
+        from src.core.benchmark import ToolResult, _compute_unique
         a = ToolResult(tool_name="a", findings=[
             {"rule_id": "R1", "file": "app.py", "line": 10},
             {"rule_id": "R2", "file": "app.py", "line": 20},
@@ -1324,9 +1346,10 @@ class TestBenchmark:
         assert unique[0]["rule_id"] == "R2"
 
     def test_run_myscan_benchmark_integration(self):
-        from src.core.benchmark import run_benchmark
-        import tempfile
         import os
+        import tempfile
+
+        from src.core.benchmark import run_benchmark
         with tempfile.TemporaryDirectory() as tmpdir:
             app_file = os.path.join(tmpdir, "app.py")
             with open(app_file, "w") as f:

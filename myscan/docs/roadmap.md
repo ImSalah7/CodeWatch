@@ -4,10 +4,9 @@ Prioritized by impact. Items are community/enterprise driven; the order may chan
 
 ## Now (short term)
 
-- [ ] **Bump version to 3.0.1** — code, `pyproject.toml`, and changelog currently say `3.0.0` while the release is labeled `v3.0.1`.
-- [ ] **Wire CI to its docs** — add `scripts/check_docs_sync.py`, ruff, mypy, and the frontend lint/build to `.github/workflows/ci.yml` (blueprints in [ci-cd.md](ci-cd.md) §3).
+- [ ] **Type checking (mypy)** — blocked on mypy 2.x module-resolution collision with the `src/__init__.py` package layout (`Source file found twice: "src" and "src.__init__"`); see [ci-cd.md](ci-cd.md) §4.
 - [ ] **Add the git remote and publish** — no remote is configured yet; tag and release `v3.0.1`.
-- [ ] **Resolve remaining frontend lint debt** — ~13 pre-existing warnings in settings/analytics/dashboard/scan/reports pages.
+- [x] **Frontend lint debt** — all pre-existing warnings/errors in settings/analytics/dashboard/scan/reports pages resolved; `npm run lint` clean and `npm run build` green.
 
 ## Near term
 
@@ -32,7 +31,9 @@ Prioritized by impact. Items are community/enterprise driven; the order may chan
 - [x] v3.0 Enterprise foundation (AST, 57 rules, API/UI/CLI/exporters)
 - [x] v3.0.0 security hardening (auth, rate limit, SSRF, secret display modes, LLM)
 - [x] v3.0.1 audit (SEC001 FP fix, dedup + occurrences, enriched reports, findings API + enterprise UI)
-- [x] Production documentation suite
+- [x] Production documentation suite + `scripts/check_docs_sync.py`
+- [x] CI wiring: ruff lint, docs-sync, and frontend lint/build jobs (mypy deferred)
+- [x] Version bump to 3.0.1
 
 ## Release cadence
 

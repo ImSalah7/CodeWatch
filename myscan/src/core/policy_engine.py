@@ -13,10 +13,7 @@ Allows users to configure:
 from __future__ import annotations
 
 import json
-import os
 from dataclasses import dataclass, field
-from pathlib import Path
-from typing import Optional
 
 
 @dataclass
@@ -86,10 +83,10 @@ class SecurityPolicy:
 
     @classmethod
     def from_file(cls, path: str) -> SecurityPolicy:
-        with open(path, "r", encoding="utf-8") as f:
+        with open(path, encoding="utf-8") as f:
             if path.endswith(".json"):
                 data = json.load(f)
-            elif path.endswith(".yaml") or path.endswith(".yml"):
+            elif path.endswith((".yaml", ".yml")):
                 import yaml
                 data = yaml.safe_load(f)
             else:
@@ -100,7 +97,7 @@ class SecurityPolicy:
         with open(path, "w", encoding="utf-8") as f:
             if path.endswith(".json"):
                 json.dump(self.to_dict(), f, indent=2)
-            elif path.endswith(".yaml") or path.endswith(".yml"):
+            elif path.endswith((".yaml", ".yml")):
                 import yaml
                 yaml.dump(self.to_dict(), f, default_flow_style=False)
 
@@ -174,7 +171,7 @@ class PolicyCheckResult:
 class PolicyEngine:
     """Evaluates findings against security policies."""
 
-    def __init__(self, policy: Optional[SecurityPolicy] = None):
+    def __init__(self, policy: SecurityPolicy | None = None):
         self.policy = policy or SecurityPolicy()
         self._severity_order = {"critical": 4, "high": 3, "medium": 2, "low": 1, "info": 0}
 
@@ -277,10 +274,7 @@ class PolicyEngine:
     def _matches_ignored_path(self, file_path: str) -> bool:
         if not file_path:
             return False
-        for pattern in self.policy.ignored_paths:
-            if pattern in file_path:
-                return True
-        return False
+        return any(pattern in file_path for pattern in self.policy.ignored_paths)
 
     def check_baseline(self, current_findings: list, baseline_findings: list) -> PolicyCheckResult:
         result = PolicyCheckResult(passed=True)

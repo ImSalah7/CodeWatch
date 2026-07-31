@@ -1,18 +1,15 @@
 """Tests for enterprise analysis modules."""
 
-import pytest
-import tempfile
 import os
-from src.core.ast_analyzer import analyze_python_ast, FunctionDef, ImportInfo, CallInfo
-from src.core.dataflow import analyze_data_flow, DataFlowResult, TaintPath
-from src.core.context_analyzer import (
-    EvalContext, PasswordContext, InjectionContext,
-)
-from src.core.confidence import calculate_confidence, confidence_to_display, ConfidenceLevel
-from src.core.risk_scorer import calculate_cvss, assess_risk, RiskLevel
-from src.core.deduplicator import deduplicate_findings, format_dedup_summary, _normalize_code
-from src.core.indexer import index_repository, FileCategory, _classify_file
+import tempfile
+
+from src.core.ast_analyzer import analyze_python_ast
+from src.core.confidence import ConfidenceLevel, calculate_confidence, confidence_to_display
+from src.core.dataflow import DataFlowResult, analyze_data_flow
+from src.core.deduplicator import deduplicate_findings
+from src.core.indexer import FileCategory, _classify_file
 from src.core.pipeline import AnalysisPipeline
+from src.core.risk_scorer import RiskLevel, assess_risk, calculate_cvss
 
 
 class TestASTAnalyzer:

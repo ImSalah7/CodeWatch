@@ -115,7 +115,7 @@ export function Sidebar() {
           <div className="card p-3 bg-accent/5 border-accent/10">
             <div className="flex items-center gap-2 mb-1">
               <Zap className="w-3.5 h-3.5 text-accent" />
-              <span className="text-xs font-semibold text-accent">v3.0.0</span>
+              <span className="text-xs font-semibold text-accent">v3.0.1</span>
             </div>
             <p className="text-[11px] text-muted leading-relaxed">
               Enterprise SAST Engine

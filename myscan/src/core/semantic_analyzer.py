@@ -16,7 +16,6 @@ from __future__ import annotations
 import ast
 from dataclasses import dataclass, field
 from enum import Enum
-from typing import Optional
 
 
 class SemanticSafety(Enum):
@@ -146,7 +145,7 @@ BUILTIN_MODULES = {"builtins", "__builtins__", "io"}
 def analyze_semantics(
     source_code: str,
     file_path: str = "",
-    imports: Optional[list] = None,
+    imports: list | None = None,
 ) -> SemanticAnalysisResult:
     """Perform semantic analysis on Python source code.
 
@@ -184,21 +183,23 @@ def analyze_semantics(
 
 def _resolve_imports(
     tree: ast.Module,
-    existing_imports: Optional[list] = None,
+    existing_imports: list | None = None,
 ) -> list[SemanticModuleInfo]:
     """Resolve all imports in the AST."""
-    imports = []
+    imports: list[SemanticModuleInfo] = []
 
     for node in ast.walk(tree):
         if isinstance(node, ast.Import):
-            for alias in node.names:
-                imports.append(SemanticModuleInfo(
+            imports.extend(
+                SemanticModuleInfo(
                     module=alias.name,
                     alias=alias.asname or alias.name,
                     names=[alias.name],
                     is_standard_library=_is_stdlib(alias.name),
                     line=node.lineno,
-                ))
+                )
+                for alias in node.names
+            )
         elif isinstance(node, ast.ImportFrom):
             module = node.module or ""
             names = [alias.name for alias in node.names]
@@ -337,9 +338,8 @@ def _determine_safety(
         if any(full_lower.startswith(dm) for dm in DANGEROUS_EXECUTION_FUNCTIONS):
             return SemanticSafety.DANGEROUS
 
-        if owner_lower in ("builtins", "__builtins__", ""):
-            if not receiver_type:
-                return SemanticSafety.DANGEROUS
+        if owner_lower in ("builtins", "__builtins__", "") and not receiver_type:
+            return SemanticSafety.DANGEROUS
 
         if receiver_type:
             return SemanticSafety.CONDITIONALLY_SAFE
@@ -349,14 +349,15 @@ def _determine_safety(
     if bare_name in ("system", "popen") and owner_lower in ("os", "posix"):
         return SemanticSafety.DANGEROUS
 
-    if bare_name in ("call", "run", "popen", "check_call", "check_output"):
-        if owner_lower == "subprocess" or receiver_lower == "subprocess":
-            args_str = " ".join(args).lower()
-            if "shell=true" in args_str:
-                return SemanticSafety.DANGEROUS
-            if "shell=false" in args_str or not any("shell" in a.lower() for a in args):
-                return SemanticSafety.CONDITIONALLY_SAFE
+    if bare_name in ("call", "run", "popen", "check_call", "check_output") and (
+        owner_lower == "subprocess" or receiver_lower == "subprocess"
+    ):
+        args_str = " ".join(args).lower()
+        if "shell=true" in args_str:
+            return SemanticSafety.DANGEROUS
+        if "shell=false" in args_str or not any("shell" in a.lower() for a in args):
             return SemanticSafety.CONDITIONALLY_SAFE
+        return SemanticSafety.CONDITIONALLY_SAFE
 
     if bare_name == "execute" and "cursor" in receiver_lower:
         args_str = " ".join(args).lower()
@@ -501,7 +502,7 @@ def _is_stdlib(module: str) -> bool:
         "struct", "codecs", "unicodedata", "string", "textwrap",
         "difflib", "enum", "dataclasses", "typing", "abc", "copy",
         "pprint", "ast", "inspect", "dis", "pickle", "shelve",
-        "dbm", "sqlite3", "ctypes", "mmap", "signal", "queue",
+        "dbm", "ctypes", "mmap", "signal", "queue",
         "sched", "select", "selectors", "asyncio", "concurrent",
         "unittest", "test", "doctest", "pdb", "profile", "timeit",
         "traceback", "warnings", "contextlib", "decimal", "fractions",

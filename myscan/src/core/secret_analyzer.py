@@ -12,8 +12,7 @@ from collections import Counter
 from dataclasses import dataclass, field
 from typing import Any
 
-from .models import Finding, FindingCategory, Severity
-
+from .models import Finding, Severity
 
 COMMON_PASSWORDS: set[str] = {
     "password", "123456", "12345678", "qwerty", "abc123", "monkey", "master",
@@ -44,7 +43,7 @@ TEST_ENV_KEYWORDS: set[str] = {
 DEV_ENV_KEYWORDS: set[str] = {
     "dev", "develop", "development", "local", "localhost",
     "debug", "debugging", "wip", "work_in_progress", "experimental",
-    "experimental", "staging", "stage", "stg", "qa", "uat",
+    "staging", "stage", "stg", "qa", "uat",
     "preproduction", "pre-production", "pre_prod",
 }
 
@@ -282,13 +281,7 @@ class SecretAnalyzer:
             title_lower = finding.title.lower()
             if "password" in title_lower or "passwd" in title_lower:
                 classification_key = "password_assignment"
-            elif "api key" in title_lower or "apikey" in title_lower:
-                classification_key = "generic_api_key"
-            elif "token" in title_lower:
-                classification_key = "generic_api_key"
-            elif "secret" in title_lower:
-                classification_key = "generic_api_key"
-            elif "key" in title_lower:
+            elif "api key" in title_lower or "apikey" in title_lower or "token" in title_lower or "secret" in title_lower or "key" in title_lower:
                 classification_key = "generic_api_key"
             elif "database" in title_lower or "connection" in title_lower:
                 classification_key = "database_url"
@@ -648,9 +641,7 @@ class SecretAnalyzer:
         if normalized.rstrip("0123456789") in COMMON_PASSWORDS and len(normalized) <= 20:
             return True
         base = re.sub(r"[^a-zA-Z]", "", normalized)
-        if base in COMMON_PASSWORDS and len(base) <= 16:
-            return True
-        return False
+        return bool(base in COMMON_PASSWORDS and len(base) <= 16)
 
     def _estimate_crack_time(self, entropy: float, length: int) -> str:
         """Estimate the time required to crack the secret."""
@@ -734,9 +725,10 @@ class SecretAnalyzer:
                 return "development"
 
         path_parts = file_path.replace("\\", "/").split("/")
-        if any(part.startswith(".") and part not in (".", "..") for part in path_parts if part):
-            if any(kw in combined for kw in ("test", "spec", "mock", "example")):
-                return "testing"
+        if any(
+            part.startswith(".") and part not in (".", "..") for part in path_parts if part
+        ) and any(kw in combined for kw in ("test", "spec", "mock", "example")):
+            return "testing"
 
         return "unknown"
 

@@ -3,7 +3,8 @@
 from __future__ import annotations
 
 import re
-from ..core.models import Finding, FindingCategory, Language, CodeLocation, Severity
+
+from ..core.models import CodeLocation, Finding, FindingCategory, Language, Severity
 from ..core.rules import ALL_RULES
 from ..scanners import BaseScanner
 
@@ -128,7 +129,7 @@ class QualityScanner(BaseScanner):
         findings = []
         blocks: dict[str, int] = {}
         min_lines = 3
-        for i in range(0, len(lines) - min_lines + 1):
+        for i in range(len(lines) - min_lines + 1):
             block = "\n".join(l.strip() for l in lines[i:i + min_lines] if l.strip())
             if len(block) > 30:
                 if block in blocks:

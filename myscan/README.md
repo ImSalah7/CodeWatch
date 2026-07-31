@@ -4,7 +4,7 @@
 
 MyScan scans local and remote (git) repositories with a multi-layered analysis engine: regex rule scanning, tree-sitter AST analysis, data-flow/taint tracking, call-graph reachability, and optional LLM-assisted enrichment. Results are exposed through a REST API, a rich Next.js web UI, a CLI, and portable reports (Markdown, HTML, JSON, SARIF, CSV).
 
-- **Version:** 3.0.0
+- **Version:** 3.0.1
 - **License:** MIT
 - **Python:** >= 3.11
 - **Web:** Next.js 16 / React 19 / Tailwind CSS v4
@@ -241,7 +241,7 @@ npm run lint
 npm run build
 ```
 
-Docs are kept in sync with the codebase by `scripts/check_docs_sync.py` (runs locally today; CI wiring is planned):
+Docs are kept in sync with the codebase by `scripts/check_docs_sync.py` (runs locally and in CI):
 
 ```bash
 python scripts/check_docs_sync.py
@@ -255,7 +255,7 @@ python scripts/check_docs_sync.py
 
 ## CI/CD
 
-The included GitHub Actions workflow (`main`/`master`, PRs) runs the test suite on Python 3.11 and 3.12 plus the CLI sanity check. A docs-sync, lint, and frontend pipeline is planned — see [docs/ci-cd.md](docs/ci-cd.md).
+The included GitHub Actions workflow (`main`/`master`, PRs) runs three jobs: backend tests on Python 3.11 and 3.12 plus CLI sanity, ruff lint + docs-sync, and a frontend lint + production build. mypy is not yet wired in (module-resolution issue) — see [docs/ci-cd.md](docs/ci-cd.md).
 
 ## Security
 

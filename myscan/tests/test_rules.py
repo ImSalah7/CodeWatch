@@ -1,8 +1,7 @@
 """Tests for rules system."""
 
-import pytest
-from src.core.rules import ALL_RULES, RULE_MAP, Rule
-from src.core.models import Severity, FindingCategory, OWASPTop10
+from src.core.models import FindingCategory, OWASPTop10, Severity
+from src.core.rules import ALL_RULES, RULE_MAP
 
 
 class TestRules:

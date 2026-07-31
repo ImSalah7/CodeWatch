@@ -19,7 +19,6 @@ from __future__ import annotations
 import ast
 from dataclasses import dataclass, field
 from enum import Enum
-from typing import Optional
 
 
 class FunctionOrigin(Enum):
@@ -60,7 +59,7 @@ class CallResolution:
     """Resolution result for a function call."""
     call_name: str
     full_name: str
-    binding: Optional[TypeBinding]
+    binding: TypeBinding | None
     origin: FunctionOrigin
     safety: SafetyLevel
     is_dangerous_builtin: bool
@@ -95,7 +94,7 @@ STDLIB_MODULES = {
     "hashlib", "hmac", "secrets", "base64", "struct",
     "ctypes", "importlib", "pkgutil", "platform", "signal",
     "tempfile", "glob", "fnmatch", "textwrap", "difflib",
-    "string", "textwrap", "reprlib", "enum", "dataclasses",
+    "string", "reprlib", "enum", "dataclasses",
     "typing", "contextlib", "abc", "copy", "pprint",
 }
 
@@ -191,7 +190,7 @@ class TypeResolver:
             return self._imports[call_name]
         return call_name
 
-    def _resolve_binding(self, call_name: str) -> Optional[TypeBinding]:
+    def _resolve_binding(self, call_name: str) -> TypeBinding | None:
         root = call_name.split(".")[0] if "." in call_name else call_name
 
         if root in self._import_aliases:
@@ -263,7 +262,7 @@ class TypeResolver:
         if bare_name in KNOWN_DANGEROUS_BUILTINS:
             if origin == FunctionOrigin.BUILTIN:
                 return SafetyLevel.DANGEROUS
-            root = call_name.split(".")[0] if "." in call_name else call_name
+            call_name.split(".")[0] if "." in call_name else call_name
             safe_owners = SAFE_OWNERS.get(bare_name, set())
             for part in full_name.split("."):
                 if part in safe_owners:
@@ -277,7 +276,7 @@ class TypeResolver:
     def _build_reasoning(
         self, call_name: str, full_name: str,
         origin: FunctionOrigin, safety: SafetyLevel,
-        binding: Optional[TypeBinding],
+        binding: TypeBinding | None,
     ) -> str:
         parts = []
         if binding:
@@ -348,13 +347,12 @@ class TypeResolver:
                         type_name = self._infer_type(node.value)
                         if type_name:
                             self._variable_types[target.id] = type_name
-            elif isinstance(node, ast.AnnAssign):
-                if isinstance(node.target, ast.Name) and node.annotation:
-                    ann = self._get_annotation_name(node.annotation)
-                    if ann:
-                        self._variable_types[node.target.id] = ann
+            elif isinstance(node, ast.AnnAssign) and isinstance(node.target, ast.Name) and node.annotation:
+                ann = self._get_annotation_name(node.annotation)
+                if ann:
+                    self._variable_types[node.target.id] = ann
 
-    def _get_annotation_name(self, annotation: ast.expr) -> Optional[str]:
+    def _get_annotation_name(self, annotation: ast.expr) -> str | None:
         if isinstance(annotation, ast.Name):
             return annotation.id
         if isinstance(annotation, ast.Attribute):
@@ -382,7 +380,7 @@ class TypeResolver:
             return str(annotation.value)
         return None
 
-    def _infer_type(self, value: ast.expr) -> Optional[str]:
+    def _infer_type(self, value: ast.expr) -> str | None:
         if isinstance(value, ast.Call):
             if isinstance(value.func, ast.Name):
                 return value.func.id
@@ -398,10 +396,9 @@ class TypeResolver:
                 return ".".join(parts)
         if isinstance(value, ast.Name):
             return self._variable_types.get(value.id)
-        if isinstance(value, ast.Attribute):
-            if isinstance(value.value, ast.Name):
-                base = self._variable_types.get(value.value.id, value.value.id)
-                return f"{base}.{value.attr}"
+        if isinstance(value, ast.Attribute) and isinstance(value.value, ast.Name):
+            base = self._variable_types.get(value.value.id, value.value.id)
+            return f"{base}.{value.attr}"
         if isinstance(value, ast.List):
             return "list"
         if isinstance(value, ast.Dict):

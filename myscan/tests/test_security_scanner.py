@@ -1,7 +1,8 @@
 """Tests for security scanner."""
 
 import pytest
-from src.core.models import Language, FindingCategory
+
+from src.core.models import Language
 from src.scanners.security_scanner import SecurityScanner
 
 

@@ -8,7 +8,6 @@ from __future__ import annotations
 
 import ast
 from dataclasses import dataclass, field
-from typing import Optional
 
 
 @dataclass
@@ -20,8 +19,8 @@ class ASTNode:
     end_line: int = 0
     column: int = 0
     value: str = ""
-    children: list["ASTNode"] = field(default_factory=list)
-    parent: Optional["ASTNode"] = None
+    children: list[ASTNode] = field(default_factory=list)
+    parent: ASTNode | None = None
     scope: str = ""
     is_user_controlled: bool = False
     is_constant: bool = False
@@ -39,7 +38,7 @@ class FunctionDef:
     line: int
     end_line: int
     args: list[str]
-    body_lines: range = field(default_factory=lambda: range(0, 0))
+    body_lines: range = field(default_factory=lambda: range(0))
     calls: list[ASTNode] = field(default_factory=list)
     assignments: list[ASTNode] = field(default_factory=list)
     returns: list[ASTNode] = field(default_factory=list)
@@ -131,7 +130,7 @@ def analyze_python_ast(content: str, file_path: str = "") -> PythonASTResult:
         result.parse_errors.append(f"Syntax error at line {e.lineno}: {e.msg}")
         return result
     except Exception as e:
-        result.parse_errors.append(f"Parse error: {str(e)}")
+        result.parse_errors.append(f"Parse error: {e!s}")
         return result
 
     _visit_module(tree, result, content)
@@ -166,9 +165,8 @@ def _visit_module(node: ast.Module, result: PythonASTResult, content: str):
             _visit_assignment(child, result, lines)
         elif isinstance(child, ast.AnnAssign):
             _visit_ann_assignment(child, result, lines)
-        elif isinstance(child, ast.Expr):
-            if isinstance(child.value, ast.Call):
-                result.calls.append(_visit_call(child.value, lines))
+        elif isinstance(child, ast.Expr) and isinstance(child.value, ast.Call):
+            result.calls.append(_visit_call(child.value, lines))
 
 
 def _visit_import(node: ast.Import, result: PythonASTResult):
@@ -258,7 +256,7 @@ def _visit_class(node: ast.ClassDef, lines: list[str]) -> FunctionDef:
     return cls
 
 
-def _visit_assignment(node: ast.Assign, result: Optional[PythonASTResult], lines: list[str]):
+def _visit_assignment(node: ast.Assign, result: PythonASTResult | None, lines: list[str]):
     """Extract variable assignment."""
     for target in node.targets:
         if isinstance(target, ast.Name):
@@ -273,7 +271,7 @@ def _visit_assignment(node: ast.Assign, result: Optional[PythonASTResult], lines
                 result.assignments.append(assign)
 
 
-def _visit_ann_assignment(node: ast.AnnAssign, result: Optional[PythonASTResult], lines: list[str]):
+def _visit_ann_assignment(node: ast.AnnAssign, result: PythonASTResult | None, lines: list[str]):
     """Extract annotated assignment (e.g., x: int = 5)."""
     if isinstance(node.target, ast.Name) and node.value:
         value = ast.dump(node.value)[:100]
@@ -307,7 +305,7 @@ def _visit_call(node: ast.Call, lines: list[str]) -> CallInfo:
         elif isinstance(arg, ast.Constant):
             args.append(repr(arg.value)[:50])
         elif isinstance(arg, ast.JoinedStr):
-            args.append(f"f-string")
+            args.append("f-string")
         else:
             args.append(ast.dump(arg)[:30])
 

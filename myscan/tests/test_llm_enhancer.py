@@ -5,9 +5,12 @@ import pytest
 from src.ai import enhancer
 from src.ai.llm_client import LLMResponse
 from src.core.models import (
-    Finding, Severity, FindingCategory, Language, CodeLocation,
+    CodeLocation,
+    Finding,
+    FindingCategory,
+    Language,
+    Severity,
 )
-from src.ai.explainer import explain_finding
 
 
 def _make_finding(rule_id="SEC001", snippet='cursor.execute("SELECT * FROM users")', severity="HIGH"):

@@ -16,11 +16,10 @@ from __future__ import annotations
 import hashlib
 import json
 from dataclasses import dataclass, field
-from datetime import datetime, timezone
-from typing import Optional
+from datetime import UTC, datetime
 
-from .dependency_scanner import Dependency, DependencyScanResult, PackageManager
 from ..__init__ import __version__
+from .dependency_scanner import Dependency, DependencyScanResult, PackageManager
 
 
 @dataclass
@@ -55,7 +54,7 @@ class SBOMDocument:
             "serialNumber": f"urn:uuid:{hashlib.md5(self.name.encode()).hexdigest()}",
             "version": 1,
             "metadata": {
-                "timestamp": self.timestamp or datetime.now(timezone.utc).isoformat(),
+                "timestamp": self.timestamp or datetime.now(UTC).isoformat(),
                 "tools": [{
                     "vendor": "MyScan",
                     "name": "MyScan Enterprise",
@@ -104,7 +103,7 @@ class SBOMDocument:
             "name": self.name,
             "documentNamespace": f"https://github.com/myscan/{self.name}",
             "creationInfo": {
-                "created": self.timestamp or datetime.now(timezone.utc).isoformat(),
+                "created": self.timestamp or datetime.now(UTC).isoformat(),
                 "creators": [f"Tool: MyScan Enterprise {__version__}"],
                 "licenseListVersion": "3.21",
             },
@@ -157,7 +156,7 @@ class SBOMGenerator:
         doc = SBOMDocument(
             name=project_name or "unknown-project",
             version="1.0.0",
-            timestamp=datetime.now(timezone.utc).isoformat(),
+            timestamp=datetime.now(UTC).isoformat(),
         )
 
         seen = set()
@@ -185,7 +184,7 @@ class SBOMGenerator:
         doc = SBOMDocument(
             name=project_name or "unknown-project",
             version="1.0.0",
-            timestamp=datetime.now(timezone.utc).isoformat(),
+            timestamp=datetime.now(UTC).isoformat(),
         )
 
         for dep in dependencies:

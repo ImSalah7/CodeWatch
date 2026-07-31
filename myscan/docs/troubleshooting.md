@@ -95,7 +95,7 @@ Known: `results/page.tsx` must wrap the client component in `<Suspense>` and pas
 
 ### CI skips linting
 
-- Current workflow runs pytest + CLI sanity only. Ruff/mypy/frontend/docs-sync jobs are blueprints in [ci-cd.md](ci-cd.md) §3 — add them to `.github/workflows/ci.yml`.
+- The workflow's `lint` and `frontend` jobs run `ruff check`/docs-sync and ESLint+`next build`. mypy is not yet wired in — see [ci-cd.md](ci-cd.md) §4. Run locally: `python -m ruff check src tests scripts && python scripts/check_docs_sync.py`.
 
 ## 5. LLM / AI explanations
 

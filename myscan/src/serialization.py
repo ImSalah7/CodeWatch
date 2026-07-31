@@ -7,7 +7,7 @@ is available.
 
 from __future__ import annotations
 
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 
 from .core.models import (
     CVSS,
@@ -48,7 +48,7 @@ def _language(value) -> Language:
         return Language.UNKNOWN
 
 
-def _owasp_from_code(code: Optional[str]) -> Optional[OWASPTop10]:
+def _owasp_from_code(code: str | None) -> OWASPTop10 | None:
     if not code:
         return None
     for member in OWASPTop10:
@@ -121,7 +121,7 @@ def result_from_dict(d: dict) -> ScanResult:
     summary = d.get("summary", {}) or {}
     findings = [finding_from_dict(f) for f in d.get("findings", [])]
 
-    def _parse_iso(value) -> Optional[datetime]:
+    def _parse_iso(value) -> datetime | None:
         if not value:
             return None
         try:
@@ -134,7 +134,7 @@ def result_from_dict(d: dict) -> ScanResult:
         files_scanned=summary.get("files_scanned", 0),
         lines_scanned=summary.get("lines_scanned", 0),
         scan_duration=d.get("scan_duration", 0.0),
-        scan_start=_parse_iso(d.get("scan_start")) or datetime.now(timezone.utc),
+        scan_start=_parse_iso(d.get("scan_start")) or datetime.now(UTC),
         scan_end=_parse_iso(d.get("scan_end")),
         languages_detected=summary.get("languages", {}),
     )

@@ -9,8 +9,7 @@ Generates natural language explanations for findings:
 
 from __future__ import annotations
 
-from dataclasses import dataclass, field
-from typing import Optional
+from dataclasses import dataclass
 
 
 @dataclass
@@ -258,7 +257,7 @@ def explain_finding(
         if severity_text in ("CRITICAL", "HIGH"):
             detailed += f"\n\nThis is a {severity_text}-severity finding that should be addressed immediately."
         elif severity_text == "MEDIUM":
-            detailed += f"\n\nThis is a MEDIUM-severity finding that should be addressed in the near term."
+            detailed += "\n\nThis is a MEDIUM-severity finding that should be addressed in the near term."
 
     return FindingExplanation(
         summary=summary,

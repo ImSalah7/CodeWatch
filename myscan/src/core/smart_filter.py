@@ -3,9 +3,9 @@
 from __future__ import annotations
 
 import re
-from ..core.config import ScanConfig
-from ..core.models import Finding, Severity, FindingCategory
 
+from ..core.config import ScanConfig
+from ..core.models import Finding, FindingCategory, Severity
 
 FALSE_POSITIVE_PATTERNS = [
     (r"(?i)(?:localhost|127\.0\.0\.1|0\.0\.0\.0)", Severity.INFO, "Hardcoded localhost is not a real vulnerability"),
@@ -25,24 +25,25 @@ class SmartFilter:
         self.config = config
 
     def is_false_positive(self, finding: Finding) -> bool:
-        if finding.location.file_path.upper().endswith((".MD", ".RST", ".TXT", ".JSON")):
-            if finding.category == FindingCategory.SECURITY:
-                return True
+        if finding.location.file_path.upper().endswith(
+            (".MD", ".RST", ".TXT", ".JSON")
+        ) and finding.category == FindingCategory.SECURITY:
+            return True
         code = finding.location.code_snippet or ""
-        title_lower = finding.title.lower()
+        finding.title.lower()
         file_lower = finding.location.file_path.lower()
 
-        if "readme" in file_lower or "docs/" in file_lower or "example" in file_lower:
-            if finding.category == FindingCategory.SECURITY:
-                return True
+        if (
+            "readme" in file_lower or "docs/" in file_lower or "example" in file_lower
+        ) and finding.category == FindingCategory.SECURITY:
+            return True
         for pattern, sev, reason in FALSE_POSITIVE_PATTERNS:
-            if re.search(pattern, code):
-                if finding.severity.numeric >= sev.numeric:
-                    finding.confidence_reasoning = f"Reduced confidence: {reason}"
-                    finding.confidence *= 0.3
-                    if finding.confidence < 0.3:
-                        finding.is_false_positive = True
-                        return True
+            if re.search(pattern, code) and finding.severity.numeric >= sev.numeric:
+                finding.confidence_reasoning = f"Reduced confidence: {reason}"
+                finding.confidence *= 0.3
+                if finding.confidence < 0.3:
+                    finding.is_false_positive = True
+                    return True
         if finding.severity == Severity.HIGH and finding.confidence < 0.5:
             finding.severity = Severity.MEDIUM
         if finding.severity == Severity.CRITICAL and finding.confidence < 0.5:

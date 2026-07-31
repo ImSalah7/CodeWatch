@@ -116,8 +116,10 @@ def errors() -> list[str]:
         # Click @cli.command() may be wrapped in a decorator line with arguments.
         impl_cmds.update(re.findall(r"def\s+(scan|quick|info|benchmark|serve)\s*\(", cli_src))
         missing = doc_cmds - impl_cmds
-        for cmd in sorted(missing):
-            problems.append(f"docs/user-guide.md documents CLI subcommand '{cmd}' but it is not in src/cli.py")
+        problems.extend(
+            f"docs/user-guide.md documents CLI subcommand '{cmd}' but it is not in src/cli.py"
+            for cmd in sorted(missing)
+        )
 
     # 5. Relative markdown links inside docs/ and README.md resolve.
     link_targets: list[Path] = []

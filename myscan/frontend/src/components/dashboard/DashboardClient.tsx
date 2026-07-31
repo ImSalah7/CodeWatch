@@ -3,7 +3,6 @@
 import { useEffect, useState } from "react";
 import { motion } from "framer-motion";
 import { MetricCard } from "@/components/ui/MetricCard";
-import { SeverityBadge } from "@/components/ui/SeverityBadge";
 import {
   Shield,
   ShieldCheck,
@@ -11,8 +10,6 @@ import {
   AlertOctagon,
   Activity,
   FolderOpen,
-  Clock,
-  FileCode,
   TrendingUp,
 } from "lucide-react";
 import { getStats, getHistory, getSecurityScore } from "@/lib/api";
@@ -59,12 +56,24 @@ function SkeletonTable() {
   );
 }
 
-const CustomTooltip = ({ active, payload, label }: any) => {
+interface TooltipEntry {
+  name?: string | number;
+  value?: string | number;
+  color?: string;
+}
+
+interface TooltipProps {
+  active?: boolean;
+  payload?: TooltipEntry[];
+  label?: string | number;
+}
+
+const CustomTooltip = ({ active, payload, label }: TooltipProps) => {
   if (!active || !payload?.length) return null;
   return (
     <div className="glass-panel px-3 py-2 text-xs">
       <p className="text-foreground font-medium mb-1">{label}</p>
-      {payload.map((entry: any, i: number) => (
+      {payload.map((entry, i) => (
         <p key={i} style={{ color: entry.color }} className="font-mono">
           {entry.name}: {entry.value}
         </p>

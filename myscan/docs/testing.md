@@ -52,7 +52,7 @@ npm run lint          # ESLint via next lint
 npm run build         # type check + production build (also catches TS errors)
 ```
 
-Known state: `results/page.tsx`, `ResultsClient.tsx`, `FindingDetailClient.tsx` lint clean; a small set of pre-existing lint warnings remain in legacy pages (settings/analytics/dashboard/scan/reports) and are tracked separately.
+Known state: `npm run lint` passes clean (0 warnings) and `npm run build` succeeds; see [ci-cd.md](ci-cd.md) for the CI wiring.
 
 ## 4. Documentation sync test
 

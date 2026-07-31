@@ -1,9 +1,15 @@
 """Tests for core models."""
 
-import pytest
 from src.core.models import (
-    Severity, FindingCategory, OWASPTop10, Language, CVSS,
-    CodeLocation, Finding, ScanResult, EXTENSION_MAP,
+    CVSS,
+    EXTENSION_MAP,
+    CodeLocation,
+    Finding,
+    FindingCategory,
+    Language,
+    OWASPTop10,
+    ScanResult,
+    Severity,
 )
 
 

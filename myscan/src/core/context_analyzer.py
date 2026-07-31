@@ -11,13 +11,10 @@ This is what separates enterprise-grade SAST from regex-based scanners.
 
 from __future__ import annotations
 
-import re
 from dataclasses import dataclass, field
 from enum import Enum
-from typing import Optional
-from .ast_analyzer import (
-    PythonASTResult, CallInfo, AssignmentInfo, FunctionDef, SOURCES, SINKS
-)
+
+from .ast_analyzer import SOURCES, CallInfo, PythonASTResult
 
 
 class ContextType(Enum):
@@ -181,13 +178,12 @@ def analyze_eval_context(
     except ValueError:
         pass
 
-    if arg.startswith(("'", '"', "f'", 'f"')):
-        if "{" not in arg:
-            ctx.is_constant = True
-            ctx.constant_value = arg
-            ctx.risk_level = "info"
-            ctx.explanation = f"eval() called with string literal {arg}. No interpolation detected."
-            return ctx
+    if arg.startswith(("'", '"', "f'", 'f"')) and "{" not in arg:
+        ctx.is_constant = True
+        ctx.constant_value = arg
+        ctx.risk_level = "info"
+        ctx.explanation = f"eval() called with string literal {arg}. No interpolation detected."
+        return ctx
 
     if call.keywords.get("globals") or call.keywords.get("locals"):
         ctx.risk_level = "medium"
@@ -206,16 +202,15 @@ def analyze_eval_context(
         return ctx
 
     for assign in ast_result.assignments:
-        if assign.target == arg:
-            if any(source in assign.value for source in SOURCES):
-                ctx.is_user_controlled = True
-                ctx.source_of_input = assign.source
-                ctx.risk_level = "critical"
-                ctx.explanation = (
-                    f"eval() called with variable '{arg}' which is assigned from "
-                    f"untrusted source {assign.source}. An attacker can execute arbitrary code."
-                )
-                return ctx
+        if assign.target == arg and any(source in assign.value for source in SOURCES):
+            ctx.is_user_controlled = True
+            ctx.source_of_input = assign.source
+            ctx.risk_level = "critical"
+            ctx.explanation = (
+                f"eval() called with variable '{arg}' which is assigned from "
+                f"untrusted source {assign.source}. An attacker can execute arbitrary code."
+            )
+            return ctx
 
     for func in ast_result.functions:
         for ret in func.returns:
@@ -223,8 +218,8 @@ def analyze_eval_context(
                 ctx.is_return_value = True
                 ctx.risk_level = "medium"
                 ctx.explanation = (
-                    f"eval() called with return value of function. "
-                    f"Risk depends on whether the function processes user input."
+                    "eval() called with return value of function. "
+                    "Risk depends on whether the function processes user input."
                 )
                 ctx.confidence_multiplier = 0.6
                 return ctx
@@ -254,7 +249,7 @@ def analyze_password_context(
     file_path: str,
     line: int,
     lines: list[str],
-    ast_result: Optional[PythonASTResult] = None,
+    ast_result: PythonASTResult | None = None,
 ) -> PasswordContext:
     """Analyze the context of a potential hardcoded password."""
     ctx = PasswordContext(
@@ -300,7 +295,7 @@ def analyze_password_context(
     if "env(" in value.lower() or "os.environ" in value or "getenv" in value:
         ctx.is_from_env = True
         ctx.risk_level = "info"
-        ctx.explanation = f"Password loaded from environment variable - properly externalized."
+        ctx.explanation = "Password loaded from environment variable - properly externalized."
         return ctx
 
     if "vault" in value.lower() or "secret" in value.lower() and "manager" in value.lower():
@@ -312,7 +307,7 @@ def analyze_password_context(
     line_idx = line - 1
     if 0 <= line_idx < len(lines):
         line_content = lines[line_idx].strip()
-        if line_content.startswith("#") or line_content.startswith("//"):
+        if line_content.startswith(("#", "//")):
             ctx.is_in_comment = True
             ctx.risk_level = "info"
             ctx.explanation = "Password found in comment - not executable code."

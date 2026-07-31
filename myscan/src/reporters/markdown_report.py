@@ -2,11 +2,10 @@
 
 from __future__ import annotations
 
-from datetime import datetime, timezone
-from html import escape as html_escape
+from datetime import UTC, datetime
 
-from ..core.models import ScanResult
 from ..__init__ import __version__
+from ..core.models import ScanResult
 
 
 class MarkdownReporter:
@@ -17,7 +16,7 @@ class MarkdownReporter:
         sec = result.security_findings
         qual = result.quality_findings
         secs = result.secret_findings
-        now = datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M UTC")
+        now = datetime.now(UTC).strftime("%Y-%m-%d %H:%M UTC")
 
         lines = [
             "# MyScan Enterprise Security Report\n",
@@ -107,13 +106,13 @@ class MarkdownReporter:
                     lines.extend(["**Vulnerable Code:**\n", "```", snippet, "```\n"])
 
                 if f.fix_suggestion:
-                    lines.extend([f"**How to Fix:**\n", "```", f.fix_suggestion[:300], "```\n"])
+                    lines.extend(["**How to Fix:**\n", "```", f.fix_suggestion[:300], "```\n"])
 
                 if f.fixed_code:
                     lines.extend(["**Suggested Fix Code:**\n", "```", f.fixed_code[:500], "```\n"])
 
                 if f.exploit_scenario:
-                    lines.extend([f"**Exploit Scenario:**\n", "> " + f.exploit_scenario.replace("\n", "\n> "), "\n"])
+                    lines.extend(["**Exploit Scenario:**\n", "> " + f.exploit_scenario.replace("\n", "\n> "), "\n"])
 
                 if f.confidence_reasoning:
                     lines.extend([f"**Confidence Reasoning:** {f.confidence_reasoning}\n"])
@@ -161,8 +160,10 @@ class MarkdownReporter:
         if not owasp_counts:
             return []
         lines = ["---\n", "## OWASP Top 10 Breakdown\n", "| Category | Count |", "|----------|-------|"]
-        for item in sorted(owasp_counts.values(), key=lambda x: x["count"], reverse=True):
-            lines.append(f"| **{item['code']}** - {item['title']} | {item['count']} |")
+        lines.extend(
+            f"| **{item['code']}** - {item['title']} | {item['count']} |"
+            for item in sorted(owasp_counts.values(), key=lambda x: x["count"], reverse=True)
+        )
         lines.append("")
         return lines
 

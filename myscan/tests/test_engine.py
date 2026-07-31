@@ -1,13 +1,12 @@
 """Tests for scan engine and config."""
 
-import os
 import tempfile
-import pytest
 from pathlib import Path
-from src.core.config import ScanConfig, SKIP_DIRS, SKIP_EXTENSIONS
+
+from src.core.config import ScanConfig
 from src.core.engine import ScanEngine
+from src.core.models import CodeLocation, Finding, FindingCategory, Language, Severity
 from src.core.smart_filter import SmartFilter
-from src.core.models import Finding, Severity, FindingCategory, Language, CodeLocation
 
 
 class TestScanConfig:
@@ -54,7 +53,7 @@ class TestSmartFilter:
             language=Language.PYTHON,
             location=CodeLocation(file_path="app.py", line=10, code_snippet="connect('localhost:5432')"),
         )
-        result = self.filter.is_false_positive(finding)
+        self.filter.is_false_positive(finding)
         assert finding.confidence < 0.8 or finding.is_false_positive
 
 

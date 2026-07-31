@@ -13,12 +13,11 @@ from __future__ import annotations
 
 import hashlib
 import json
-import os
 import time
+from collections.abc import Callable
 from concurrent.futures import ThreadPoolExecutor, as_completed
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from pathlib import Path
-from typing import Callable, Optional
 
 
 @dataclass
@@ -56,7 +55,7 @@ class ScanMetrics:
 class ASTCache:
     """Caches AST parse results by file content hash."""
 
-    def __init__(self, max_size: int = 1000, cache_dir: Optional[str] = None):
+    def __init__(self, max_size: int = 1000, cache_dir: str | None = None):
         self._cache: dict[str, dict] = {}
         self._file_keys: dict[str, set[str]] = {}
         self._max_size = max_size
@@ -64,7 +63,7 @@ class ASTCache:
         self._hits = 0
         self._misses = 0
 
-    def get(self, file_path: str, content: str) -> Optional[dict]:
+    def get(self, file_path: str, content: str) -> dict | None:
         key = self._make_key(file_path, content)
         if key in self._cache:
             self._hits += 1
@@ -117,7 +116,7 @@ class ASTCache:
     def _make_key(file_path: str, content: str) -> str:
         return hashlib.sha256(f"{file_path}:{content}".encode()).hexdigest()
 
-    def _load_from_disk(self, key: str) -> Optional[dict]:
+    def _load_from_disk(self, key: str) -> dict | None:
         if not self._cache_dir:
             return None
         cache_file = self._cache_dir / f"{key}.json"
@@ -142,7 +141,7 @@ class ASTCache:
 class IncrementalScanner:
     """Tracks file changes for incremental scanning."""
 
-    def __init__(self, state_file: Optional[str] = None):
+    def __init__(self, state_file: str | None = None):
         self._state_file = Path(state_file) if state_file else None
         self._file_hashes: dict[str, str] = {}
         self._load_state()

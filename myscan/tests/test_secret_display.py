@@ -3,14 +3,15 @@
 from __future__ import annotations
 
 import json
-import tempfile
-from pathlib import Path
-
-import pytest
 
 from src.core.models import (
-    CodeLocation, Finding, FindingCategory, Language, ScanResult,
-    SecretDisplayMode, Severity,
+    CodeLocation,
+    Finding,
+    FindingCategory,
+    Language,
+    ScanResult,
+    SecretDisplayMode,
+    Severity,
 )
 from src.core.secret_display import (
     SecretDisplayConfig,

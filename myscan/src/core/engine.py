@@ -8,13 +8,16 @@ from __future__ import annotations
 import os
 import time
 from pathlib import Path
-from typing import Optional
 
-from ..core.config import ScanConfig, SKIP_EXTENSIONS, SKIP_FILES, SKIP_PATH_PATTERNS
+from ..core.config import SKIP_EXTENSIONS, SKIP_FILES, SKIP_PATH_PATTERNS, ScanConfig
 from ..core.models import (
-    EXTENSION_MAP, Finding, FindingCategory, Language, ScanResult,
+    EXTENSION_MAP,
+    Finding,
+    FindingCategory,
+    Language,
+    ScanResult,
 )
-from ..core.rules import ALL_RULES, Rule
+from ..core.rules import ALL_RULES
 from .smart_filter import SmartFilter
 
 
@@ -35,9 +38,9 @@ class ScanEngine:
         self._load_scanners()
 
     def _load_scanners(self):
-        from ..scanners.security_scanner import SecurityScanner
         from ..scanners.quality_scanner import QualityScanner
         from ..scanners.secrets_scanner import SecretsScanner
+        from ..scanners.security_scanner import SecurityScanner
 
         if not self.config.skip_security:
             self.scanners.append(SecurityScanner())
@@ -127,10 +130,10 @@ class ScanEngine:
 
     def _scan_enterprise(self, target_path: Path, result: ScanResult, start: float) -> ScanResult:
         """Run enterprise-grade analysis with AST, data flow, taint, and context analysis."""
+        from ..ai.explainer import explain_finding
+        from .fix_generator import generate_fix
+        from .models import CVSS, CodeLocation, OWASPTop10, Severity
         from .pipeline import AnalysisPipeline
-        from .models import Severity, CVSS, CodeLocation, OWASPTop10
-        from .fix_generator import generate_fix, generate_secure_alternative
-        from ..ai.explainer import explain_finding, explain_taint_flow
         from .secret_analyzer import SecretAnalyzer
 
         result._enterprise_mode = True
@@ -329,10 +332,7 @@ class ScanEngine:
         rel = file_path.relative_to(root)
         parts = rel.parts
         skip_dirs = self.config.skip_dirs
-        for part in parts:
-            if part in skip_dirs:
-                return False
-        return True
+        return all(part not in skip_dirs for part in parts)
 
     def _detect_language(self, file_path: Path) -> Language:
         name = file_path.name.lower()

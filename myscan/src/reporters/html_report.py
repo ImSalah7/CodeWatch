@@ -2,12 +2,11 @@
 
 from __future__ import annotations
 
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from html import escape as html_escape
-from typing import Optional
 
-from ..core.models import FindingCategory, ScanResult, SecretDisplayMode
 from ..__init__ import __version__
+from ..core.models import ScanResult
 
 
 class HTMLReporter:
@@ -18,7 +17,7 @@ class HTMLReporter:
         sec = result.security_findings
         qual = result.quality_findings
         secs = result.secret_findings
-        enterprise = getattr(result, '_enterprise_mode', False)
+        getattr(result, '_enterprise_mode', False)
         secret_display = getattr(result, '_secret_display_mode', 'smart')
 
         secret_warning = ""
@@ -113,7 +112,7 @@ tr:hover {{ background: rgba(59, 130, 246, 0.05); }}
 <div class="header">
 <h1>MyScan Enterprise Security Report</h1>
 <p class="subtitle">Repository: {html_escape(getattr(result, 'repository', '') or 'N/A')} | Branch: {html_escape(getattr(result, 'branch', '') or 'N/A')} | Commit: {html_escape(getattr(result, 'commit', '') or 'N/A')} | Scan ID: {html_escape(getattr(result, 'scan_id', '') or 'N/A')}</p>
-<p class="subtitle">Generated: {datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M UTC")} | Scanner: MyScan v{__version__} | Files scanned: {result.files_scanned} | Rules executed: {getattr(result, 'rules_executed', 0)} | Duration: {result.scan_duration:.1f}s | Lines: {result.lines_scanned:,}</p>
+<p class="subtitle">Generated: {datetime.now(UTC).strftime("%Y-%m-%d %H:%M UTC")} | Scanner: MyScan v{__version__} | Files scanned: {result.files_scanned} | Rules executed: {getattr(result, 'rules_executed', 0)} | Duration: {result.scan_duration:.1f}s | Lines: {result.lines_scanned:,}</p>
 </div>
 
 {secret_warning}
@@ -188,9 +187,9 @@ tr:hover {{ background: rgba(59, 130, 246, 0.05); }}
 
     def _build_finding_cards(self, findings, colors: dict, bgs: dict) -> str:
         cards = ""
-        for i, f in enumerate(sorted(findings, key=lambda x: x.severity.numeric), 1):
+        for _i, f in enumerate(sorted(findings, key=lambda x: x.severity.numeric), 1):
             color = colors.get(f.severity.value, "#6b7280")
-            bg = bgs.get(f.severity.value, "rgba(107,114,128,0.1)")
+            bgs.get(f.severity.value, "rgba(107,114,128,0.1)")
 
             refs_html = "".join(f'<a href="{html_escape(r)}" target="_blank">Ref {j+1}</a>' for j, r in enumerate(f.references[:5]))
             code_html = self._format_code_snippet(f.location.code_snippet, f.location.line) if f.location.code_snippet else ""

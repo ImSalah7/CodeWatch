@@ -24,15 +24,13 @@ if sys.platform == "win32":
         pass
 
 from rich.console import Console
-from rich.progress import Progress, SpinnerColumn, TextColumn, BarColumn
-from rich.table import Table
 from rich.panel import Panel
-from rich.text import Text
+from rich.progress import BarColumn, Progress, SpinnerColumn, TextColumn
+from rich.table import Table
 
 from .__init__ import __version__
 from .core.config import ScanConfig
 from .core.engine import ScanEngine
-from .core.models import FindingCategory
 
 console = Console(force_terminal=True)
 
@@ -55,7 +53,7 @@ def _prepare_target(target: str, quiet: bool = False) -> tuple[str, bool]:
             return temp_dir, True
         except (subprocess.CalledProcessError, subprocess.TimeoutExpired) as e:
             shutil.rmtree(temp_dir, ignore_errors=True)
-            raise RuntimeError(f"Failed to clone {target}: {e}")
+            raise RuntimeError(f"Failed to clone {target}: {e}") from e
     return target, False
 
 
@@ -63,7 +61,6 @@ def _prepare_target(target: str, quiet: bool = False) -> tuple[str, bool]:
 @click.version_option(version=__version__, prog_name="MyScan")
 def cli():
     """MyScan - Enterprise AI-Powered SAST Platform"""
-    pass
 
 
 @cli.command()
@@ -173,7 +170,6 @@ def quick(target, no_deps, severity):
         engine = ScanEngine(config)
         result = engine.scan(local_path)
 
-        sev_counts = result.severity_counts
         critical_high = [f for f in result.security_findings if f.severity.value in ("critical", "high")]
 
         console.print(f"\n[bold]Risk Score: {result.risk_score}/100 | Grade: {result.grade}[/bold]\n")
@@ -258,7 +254,7 @@ def _print_results(result):
     console.print(summary_table)
 
     if sec:
-        console.print(f"\n[bold red]Top Security Findings:[/bold red]")
+        console.print("\n[bold red]Top Security Findings:[/bold red]")
         for f in sorted(sec, key=lambda x: x.severity.numeric)[:10]:
             sev_style = style_map.get(f.severity.value, "")
             console.print(f"  [{sev_style}]{f.severity.value.upper():>8}[/{sev_style}]  {f.location.file_path}:{f.location.line}  {f.title}")
@@ -269,14 +265,14 @@ def _print_results(result):
 
     if secs:
         secret_display = getattr(result, '_secret_display_mode', 'smart')
-        console.print(f"\n[bold yellow]Secrets Found:[/bold yellow]")
+        console.print("\n[bold yellow]Secrets Found:[/bold yellow]")
         for f in secs[:5]:
             console.print(f"  {f.location.file_path}:{f.location.line}  {f.title}")
             snippet = f.location.code_snippet or ""
             if snippet:
                 console.print(f"  {'':>8}  [dim]Value: {snippet[:60]}[/dim]")
         if secret_display == "full":
-            console.print(f"\n  [bold red]WARNING: Full secret display is enabled.[/bold red]")
+            console.print("\n  [bold red]WARNING: Full secret display is enabled.[/bold red]")
 
     console.print(f"\n[dim]Scanned {result.files_scanned} files, {result.lines_scanned:,} lines in {result.scan_duration:.1f}s[/dim]")
     console.print(f"[dim]Languages: {', '.join(f'{k}: {v}' for k, v in sorted(result.languages_detected.items(), key=lambda x: x[1], reverse=True))}[/dim]")
@@ -315,7 +311,6 @@ def run_scan(target: str, local: bool = False, use_ai: bool = False, skip_deps: 
              enterprise: bool = False,
              secret_display: str = "smart") -> list[dict]:
     """Programmatic scan function for dashboard/API use."""
-    from .core.models import SecretDisplayMode
     from .core.secret_display import SecretDisplayConfig, apply_secret_display_mode
 
     display_config = SecretDisplayConfig.from_string(secret_display)
@@ -393,7 +388,7 @@ def benchmark(target, enterprise, tools, output):
         ]
         for label, key in metric_rows:
             row = [label]
-            for tool, m in result.metrics.items():
+            for m in result.metrics.values():
                 val = m.get(key, 0)
                 if isinstance(val, float) and val < 1:
                     row.append(f"{val:.1%}")

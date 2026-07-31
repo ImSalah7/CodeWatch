@@ -6,7 +6,7 @@ import math
 import re
 from collections import Counter
 
-from ..core.models import Finding, FindingCategory, Language, CodeLocation, Severity
+from ..core.models import CodeLocation, Finding, FindingCategory, Language, Severity
 from ..scanners import BaseScanner
 
 SECRET_PATTERNS: list[tuple[str, str, str, Severity, float, str, str]] = [
@@ -76,7 +76,7 @@ COMMENT_LINE_PATTERNS = [
     re.compile(r'^\s*(?:>>>|In\s*\[\d+\]:)'),
 ]
 
-LDAP_FLAGS = {"ldap", "ldaps", "simple", "none", "external", "digest-md5", "gssapi", "external"}
+LDAP_FLAGS = {"ldap", "ldaps", "simple", "none", "external", "digest-md5", "gssapi"}
 
 CONFIG_DEFAULT_PATTERNS = [
     re.compile(r'(?i)^(?:default|example|sample|demo|test|dev|local)[-_]?'),
@@ -93,11 +93,9 @@ def _is_literal_value(value: str) -> bool:
        (stripped.startswith("'") and stripped.endswith("'")):
         inner = stripped[1:-1]
         return len(inner) >= 1
-    if stripped.startswith("b\"") or stripped.startswith("b'"):
+    if stripped.startswith(('b"', "b'")):
         return True
-    if re.match(r'^-?\d+(\.\d+)?$', stripped):
-        return True
-    return False
+    return bool(re.match(r'^-?\d+(\.\d+)?$', stripped))
 
 
 def _is_non_literal_rhs(rhs: str) -> bool:
@@ -110,15 +108,13 @@ def _is_non_literal_rhs(rhs: str) -> bool:
     for pattern in NOT_LITERAL_PATTERNS:
         if pattern.search(stripped):
             return True
-    if re.match(r'^[a-zA-Z_][a-zA-Z0-9_.]*$', stripped):
-        return True
-    return False
+    return bool(re.match(r'^[a-zA-Z_][a-zA-Z0-9_.]*$', stripped))
 
 
 def _classify_password_secret(variable_name: str, value: str) -> str:
     """Sub-classify password-type secrets based on variable name and value context."""
     lower_name = variable_name.lower()
-    lower_value = value.lower().strip("'\"")
+    value.lower().strip("'\"")
     if any(x in lower_name for x in ["db", "database", "mysql", "postgres", "redis", "mongo"]):
         return "Database Password"
     if any(x in lower_name for x in ["api_key", "apikey", "api_secret"]):
@@ -195,16 +191,15 @@ class SecretsScanner(BaseScanner):
         findings: list[Finding] = []
         lines = content.splitlines()
 
-        for secret_type, pattern, title, severity, confidence, cwe, fix in SECRET_PATTERNS:
+        for secret_type, pattern, _title, severity, confidence, cwe, fix in SECRET_PATTERNS:
             try:
                 regex = re.compile(pattern, re.IGNORECASE)
             except re.error:
                 continue
             for i, line in enumerate(lines, 1):
                 stripped = line.strip()
-                if stripped.startswith("#") or stripped.startswith("//") or stripped.startswith("*"):
-                    if secret_type != "private_key_header":
-                        continue
+                if stripped.startswith(("#", "//", "*")) and secret_type != "private_key_header":
+                    continue
                 match = regex.search(line)
                 if not match:
                     continue
@@ -323,7 +318,7 @@ class SecretsScanner(BaseScanner):
         findings = []
         for i, line in enumerate(lines, 1):
             stripped = line.strip()
-            if stripped.startswith("#") or stripped.startswith("//"):
+            if stripped.startswith(("#", "//")):
                 continue
             for pattern in COMMENT_LINE_PATTERNS:
                 if pattern.match(stripped):
@@ -332,26 +327,30 @@ class SecretsScanner(BaseScanner):
                 matches = re.findall(r'["\']([A-Za-z0-9+/=\-_]{32,80})["\']', line)
                 for match in matches:
                     entropy = self._entropy(match)
-                    if entropy > 4.5 and not match.isupper() and not match.islower() and not match.isdigit():
-                        if any(c in match for c in "ABCDEFGHIJKLMNOPQRSTUVWXYZ"):
-                            if any(c in match for c in "0123456789"):
-                                if match == match[::-1]:
-                                    continue
-                                findings.append(Finding(
-                                    rule_id="SEC_HIGH_ENTROPY",
-                                    title="High-Entropy String",
-                                    description=f"String has entropy {entropy:.1f}/8.0, may be a secret.",
-                                    severity=Severity.MEDIUM,
-                                    confidence=min(entropy / 8.0, 0.7),
-                                    category=FindingCategory.SECRET,
-                                    language=lang,
-                                    location=CodeLocation(file_path=file_path, line=i, code_snippet=line.strip()),
-                                    cwe="CWE-798",
-                                    fix_suggestion="Verify if this is a secret. If so, move to environment variables.",
-                                    tags=["secret", "entropy"],
-                                    raw_secret=match,
-                                ))
-                                break
+                    if (
+                        entropy > 4.5
+                        and not match.isupper()
+                        and not match.islower()
+                        and not match.isdigit()
+                        and any(c in match for c in "ABCDEFGHIJKLMNOPQRSTUVWXYZ")
+                        and any(c in match for c in "0123456789")
+                        and match != match[::-1]
+                    ):
+                        findings.append(Finding(
+                            rule_id="SEC_HIGH_ENTROPY",
+                            title="High-Entropy String",
+                            description=f"String has entropy {entropy:.1f}/8.0, may be a secret.",
+                            severity=Severity.MEDIUM,
+                            confidence=min(entropy / 8.0, 0.7),
+                            category=FindingCategory.SECRET,
+                            language=lang,
+                            location=CodeLocation(file_path=file_path, line=i, code_snippet=line.strip()),
+                            cwe="CWE-798",
+                            fix_suggestion="Verify if this is a secret. If so, move to environment variables.",
+                            tags=["secret", "entropy"],
+                            raw_secret=match,
+                        ))
+                        break
         return findings
 
     def _entropy(self, s: str) -> float:

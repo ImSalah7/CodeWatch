@@ -11,27 +11,22 @@ If validation fails at any stage, DO NOT report the finding.
 
 from __future__ import annotations
 
-import re
 import math
-import hashlib
-from typing import Optional
+import re
 
-from .evidence_engine import (
-    EvidenceEngine,
-    Evidence,
-    EvidenceType,
-    EvidenceStrength,
-    ValidationResult,
-)
-from .type_resolver import TypeResolver, SafetyLevel
 from .context_analyzer import (
     ContextType,
     analyze_file_context,
 )
-from .trust_engine import TrustEngine, build_trust_from_pipeline
-from .import_resolver import build_import_table, ImportResolutionResult
-from .reachability import analyze_reachability, ReachabilityResult
-
+from .evidence_engine import (
+    Evidence,
+    EvidenceEngine,
+    EvidenceStrength,
+    EvidenceType,
+)
+from .import_resolver import ImportResolutionResult
+from .reachability import ReachabilityResult
+from .type_resolver import TypeResolver
 
 DANGEROUS_CALL_RULE_PREFIXES = {
     "eval", "exec", "compile", "__import__",
@@ -73,8 +68,8 @@ class ValidationPipeline:
         self.min_confidence = min_confidence
         self.evidence_engine = EvidenceEngine(min_confidence=min_confidence)
         self.type_resolver = TypeResolver()
-        self._import_cache: Optional[ImportResolutionResult] = None
-        self._reachability_cache: Optional[ReachabilityResult] = None
+        self._import_cache: ImportResolutionResult | None = None
+        self._reachability_cache: ReachabilityResult | None = None
 
     def set_import_resolution(self, result: ImportResolutionResult) -> None:
         self._import_cache = result
@@ -86,9 +81,9 @@ class ValidationPipeline:
         self,
         finding: dict,
         file_content: str = "",
-        ast_result: Optional[dict] = None,
-        type_resolver_result: Optional[dict] = None,
-    ) -> Optional[dict]:
+        ast_result: dict | None = None,
+        type_resolver_result: dict | None = None,
+    ) -> dict | None:
         """Run the full validation pipeline on a single finding.
 
         Returns the validated finding dict with evidence attached if it passes,
@@ -98,18 +93,18 @@ class ValidationPipeline:
         negative_evidences: list[Evidence] = []
 
         rule_id = finding.get("rule_id", "")
-        title = finding.get("title", "")
-        severity = finding.get("severity", "info")
-        confidence = finding.get("confidence", 0.0)
+        finding.get("title", "")
+        finding.get("severity", "info")
+        finding.get("confidence", 0.0)
         category = finding.get("category", "")
-        language = finding.get("language", "python")
+        finding.get("language", "python")
         file_path = finding.get("file_path", "")
         line = finding.get("line", 0)
-        code_snippet = finding.get("code_snippet", "")
-        tags = finding.get("tags", [])
-        raw_secret = finding.get("raw_secret", "")
+        finding.get("code_snippet", "")
+        finding.get("tags", [])
+        finding.get("raw_secret", "")
 
-        file_lower = file_path.lower()
+        file_path.lower()
 
         # Stage 1: Pattern Validation
         # A regex matched, so we always have at least weak evidence.
@@ -133,7 +128,7 @@ class ValidationPipeline:
 
         # Stage 3: Type Resolution
         type_rejection = self._validate_type(
-            finding, ast_result, positive_evidences, negative_evidences
+            finding, ast_result, type_resolver_result, positive_evidences, negative_evidences
         )
         if type_rejection is not None:
             return None
@@ -186,11 +181,11 @@ class ValidationPipeline:
     def _validate_ast(
         self,
         finding: dict,
-        ast_result: Optional[dict],
+        ast_result: dict | None,
         file_content: str,
         positive_evidences: list[Evidence],
         negative_evidences: list[Evidence],
-    ) -> Optional[str]:
+    ) -> str | None:
         """Stage 2: AST Validation.
 
         Verify the vulnerable construct exists in the AST when available.
@@ -274,10 +269,11 @@ class ValidationPipeline:
     def _validate_type(
         self,
         finding: dict,
-        ast_result: Optional[dict],
+        ast_result: dict | None,
+        type_resolver_result: dict | None,
         positive_evidences: list[Evidence],
         negative_evidences: list[Evidence],
-    ) -> Optional[str]:
+    ) -> str | None:
         """Stage 3: Type Resolution.
 
         For function call findings, determine if the call is actually dangerous.
@@ -453,7 +449,7 @@ class ValidationPipeline:
         if not is_call_finding:
             return
 
-        for fkey, freach in self._reachability_cache.functions.items():
+        for freach in self._reachability_cache.functions.values():
             if freach.file_path == file_path and abs(freach.line - line) <= 3:
                 if freach.status.value == "dead_code":
                     negative_evidences.append(
@@ -523,7 +519,7 @@ class ValidationPipeline:
         """
         file_path = finding.get("file_path", "")
         line = finding.get("line", 0)
-        code_snippet = finding.get("code_snippet", "")
+        finding.get("code_snippet", "")
         category = finding.get("category", "")
 
         context_type = analyze_file_context(file_path)
@@ -583,7 +579,7 @@ class ValidationPipeline:
         line_idx = line - 1
         if 0 <= line_idx < len(lines):
             line_text = lines[line_idx].strip()
-            if line_text.startswith("#") or line_text.startswith("//"):
+            if line_text.startswith(("#", "//")):
                 negative_evidences.append(
                     self.evidence_engine.create_negative_evidence(
                         signal="in_comment",
@@ -634,7 +630,7 @@ class ValidationPipeline:
         file_content: str,
         positive_evidences: list[Evidence],
         negative_evidences: list[Evidence],
-    ) -> Optional[str]:
+    ) -> str | None:
         """Stage 5: Secret-Specific Validation.
 
         For SECRET category findings, check if the value is a true literal,
@@ -730,7 +726,7 @@ class ValidationPipeline:
         self,
         code_snippet: str,
         negative_evidences: list[Evidence],
-    ) -> Optional[str]:
+    ) -> str | None:
         """Check if a password-type finding is a literal assignment.
 
         Returns rejection reason if the value is not a literal, else None.
@@ -786,17 +782,16 @@ class ValidationPipeline:
             )
             return "variable_reference_not_literal"
 
-        if any(c.isdigit() for c in rhs_stripped) or any(
+        if (any(c.isdigit() for c in rhs_stripped) or any(
             c in "!@#$%^&*()-_=+[]{}|;:',.<>?/`~" for c in rhs_stripped
-        ):
-            if not rhs_stripped.startswith(("'", '"')):
-                negative_evidences.append(
-                    self.evidence_engine.create_negative_evidence(
-                        signal="not_literal",
-                        reason=f"Value '{rhs_stripped[:50]}' has special chars but no quotes, unclear if literal",
-                        penalty=-0.40,
-                    )
+        )) and not rhs_stripped.startswith(("'", '"')):
+            negative_evidences.append(
+                self.evidence_engine.create_negative_evidence(
+                    signal="not_literal",
+                    reason=f"Value '{rhs_stripped[:50]}' has special chars but no quotes, unclear if literal",
+                    penalty=-0.40,
                 )
+            )
 
         return None
 
@@ -805,7 +800,7 @@ class ValidationPipeline:
         rule_id: str,
         code_snippet: str,
         tags: list[str],
-    ) -> Optional[str]:
+    ) -> str | None:
         """Classify a secret into a precise type based on rule_id and content."""
         snippet_lower = code_snippet.lower()
 
@@ -882,9 +877,9 @@ class ValidationPipeline:
     def validate_all(
         self,
         findings: list[dict],
-        file_contents: Optional[dict[str, str]] = None,
-        ast_results: Optional[dict[str, dict]] = None,
-        type_resolver_results: Optional[dict[str, dict]] = None,
+        file_contents: dict[str, str] | None = None,
+        ast_results: dict[str, dict] | None = None,
+        type_resolver_results: dict[str, dict] | None = None,
     ) -> list[dict]:
         """Validate a list of findings and return only those that pass the pipeline.
 
@@ -966,7 +961,7 @@ def _names_match_fuzzy(snippet_name: str, ast_name: str) -> bool:
     return snippet_name == ast_name
 
 
-def _find_call_at_line(calls: list[dict], target_line: int) -> Optional[int]:
+def _find_call_at_line(calls: list[dict], target_line: int) -> int | None:
     """Find a call at or near the target line number."""
     for call in calls:
         call_line = call.get("line", 0)
@@ -982,7 +977,7 @@ def _variable_matches_snippet(variable: str, snippet: str) -> bool:
     return variable in snippet
 
 
-def _extract_rhs_value(code_snippet: str) -> Optional[str]:
+def _extract_rhs_value(code_snippet: str) -> str | None:
     """Extract the right-hand side value from an assignment snippet.
 
     Examples:
@@ -1016,14 +1011,9 @@ def _looks_like_variable_reference(value: str) -> bool:
         return False
 
     if re.match(r"^[a-zA-Z_][\w.]*$", value):
-        if value in ("True", "False", "None", "self", "cls"):
-            return False
-        return True
+        return value not in ("True", "False", "None", "self", "cls")
 
-    if "(" in value:
-        return True
-
-    return False
+    return "(" in value
 
 
 def _calculate_entropy(value: str) -> float:

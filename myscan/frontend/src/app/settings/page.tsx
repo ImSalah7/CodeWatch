@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { Settings, Shield, Bell, Server, Key, Save, Loader2, CheckCircle2 } from "lucide-react";
+import { Shield, Server, Key, Save, Loader2, CheckCircle2 } from "lucide-react";
 import { motion } from "framer-motion";
 import { getSettings, saveSettings } from "@/lib/api";
 import type { ScanSettings } from "@/lib/api";
@@ -78,8 +78,8 @@ export default function SettingsPage() {
       await saveSettings(settings);
       setSaved(true);
       setTimeout(() => setSaved(false), 3000);
-    } catch (e: any) {
-      setError(e.message || "Failed to save settings");
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Failed to save settings");
     } finally {
       setSaving(false);
     }
@@ -209,9 +209,9 @@ export default function SettingsPage() {
         </div>
         <div className="grid grid-cols-2 gap-3">
           {[
-            { label: "Version", value: "3.0.0" },
+            { label: "Version", value: "3.0.1" },
             { label: "Engine", value: "Enterprise SAST" },
-            { label: "Rules", value: "46 built-in" },
+            { label: "Rules", value: "57 built-in" },
             { label: "Languages", value: "Python, JS, TS, Go" },
           ].map((item) => (
             <div key={item.label} className="p-3 rounded-lg bg-surface border border-border">

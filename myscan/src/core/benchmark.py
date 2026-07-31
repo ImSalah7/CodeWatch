@@ -13,8 +13,6 @@ import subprocess
 import tempfile
 import time
 from dataclasses import dataclass, field
-from pathlib import Path
-from typing import Optional
 
 
 @dataclass
@@ -41,7 +39,7 @@ class ToolResult:
 
 @dataclass
 class BenchmarkComparison:
-    myscan_result: Optional[ToolResult] = None
+    myscan_result: ToolResult | None = None
     external_results: dict[str, ToolResult] = field(default_factory=dict)
     overlap: dict[str, list[dict]] = field(default_factory=dict)
     unique_per_tool: dict[str, list[dict]] = field(default_factory=dict)
@@ -115,27 +113,28 @@ def _run_semgrep(target: str) -> ToolResult:
         with tempfile.NamedTemporaryFile(suffix=".json", delete=False) as tmp:
             tmp_path = tmp.name
 
-        proc = subprocess.run(
+        subprocess.run(
             ["semgrep", "--config", "auto", "--json", "--output", tmp_path, target],
             capture_output=True,
             text=True,
             timeout=300,
         )
 
-        with open(tmp_path, "r", encoding="utf-8") as f:
+        with open(tmp_path, encoding="utf-8") as f:
             data = json.load(f)
 
         os.unlink(tmp_path)
 
-        findings = []
-        for r in data.get("results", []):
-            findings.append({
+        findings = [
+            {
                 "rule_id": r.get("check_id", ""),
                 "file": _normalize_file_path(r.get("path", "")),
                 "line": r.get("start", {}).get("line", 0),
                 "severity": _normalize_severity(r.get("extra", {}).get("severity", "WARNING")),
                 "message": r.get("extra", {}).get("message", ""),
-            })
+            }
+            for r in data.get("results", [])
+        ]
 
         return ToolResult(
             tool_name="semgrep",
@@ -164,15 +163,16 @@ def _run_bandit(target: str) -> ToolResult:
 
         data = json.loads(proc.stdout) if proc.stdout else {}
 
-        findings = []
-        for r in data.get("results", []):
-            findings.append({
+        findings = [
+            {
                 "rule_id": r.get("test_id", ""),
                 "file": _normalize_file_path(r.get("filename", "")),
                 "line": r.get("line_number", 0),
                 "severity": _normalize_severity(r.get("issue_severity", "MEDIUM")),
                 "message": r.get("issue_text", ""),
-            })
+            }
+            for r in data.get("results", [])
+        ]
 
         return ToolResult(
             tool_name="bandit",
@@ -199,9 +199,8 @@ def _run_myscan(target: str, enterprise: bool = False) -> ToolResult:
         engine = ScanEngine(config, enterprise_mode=enterprise)
         result = engine.scan(target)
 
-        findings = []
-        for f in result.findings:
-            findings.append({
+        findings = [
+            {
                 "rule_id": f.rule_id,
                 "file": _normalize_file_path(f.location.file_path),
                 "line": f.location.line,
@@ -209,7 +208,9 @@ def _run_myscan(target: str, enterprise: bool = False) -> ToolResult:
                 "message": f.title,
                 "confidence": f.confidence,
                 "category": f.category.value,
-            })
+            }
+            for f in result.findings
+        ]
 
         return ToolResult(
             tool_name="myscan",
@@ -284,7 +285,7 @@ def _compute_metrics(
 def run_benchmark(
     target: str,
     enterprise: bool = False,
-    tools: Optional[list[str]] = None,
+    tools: list[str] | None = None,
 ) -> BenchmarkComparison:
     """Run a full benchmark comparing MyScan against external tools.
 

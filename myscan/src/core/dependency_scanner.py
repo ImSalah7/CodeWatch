@@ -22,7 +22,6 @@ import re
 from dataclasses import dataclass, field
 from enum import Enum
 from pathlib import Path
-from typing import Optional
 
 
 class PackageManager(Enum):
@@ -228,10 +227,7 @@ def _bounds_one(spec: str) -> tuple:
         parts = _release_parts(base)
         if not parts:
             return (None, True, None, True)
-        if len(parts) == 1:
-            hi = [parts[0] + 1]
-        else:
-            hi = [parts[0], parts[1] + 1]
+        hi = [parts[0] + 1] if len(parts) == 1 else [parts[0], parts[1] + 1]
         return (_version_key(base), True, _version_key(_join_parts(hi)), False)
     m = re.match(r"^\s*(?P<op>\^|~=|>=|<=|==|=|>|<|~|!=)?\s*(?P<ver>.+?)\s*$", spec)
     op = (m.group("op") or "").strip() if m else ""
@@ -250,10 +246,7 @@ def _bounds_one(spec: str) -> tuple:
         parts = _release_parts(ver)
         if not parts:
             return (None, True, None, True)
-        if len(parts) == 1:
-            hi = [parts[0] + 1]
-        else:
-            hi = parts[:-2] + [parts[-2] + 1]
+        hi = [parts[0] + 1] if len(parts) == 1 else parts[:-2] + [parts[-2] + 1]
         return (_version_key(ver), True, _version_key(_join_parts(hi)), False)
     if op == "^":
         parts = _release_parts(ver)
@@ -270,10 +263,7 @@ def _bounds_one(spec: str) -> tuple:
         parts = _release_parts(ver)
         if not parts:
             return (None, True, None, True)
-        if len(parts) == 1:
-            hi = [parts[0] + 1]
-        else:
-            hi = [parts[0], parts[1] + 1]
+        hi = [parts[0] + 1] if len(parts) == 1 else [parts[0], parts[1] + 1]
         return (_version_key(ver), True, _version_key(_join_parts(hi)), False)
     return (_version_key(ver), True, _version_key(ver), True)
 
@@ -392,7 +382,7 @@ class DependencyScanner:
 
         return results
 
-    def scan_file(self, file_path: str) -> Optional[DependencyScanResult]:
+    def scan_file(self, file_path: str) -> DependencyScanResult | None:
         path = Path(file_path)
         scanners = {
             "requirements.txt": self._scan_requirements_txt,
@@ -417,10 +407,10 @@ class DependencyScanner:
     def _scan_requirements_txt(self, file_path: str) -> DependencyScanResult:
         result = DependencyScanResult(file_path=file_path, package_manager=PackageManager.PIP)
         try:
-            with open(file_path, "r", encoding="utf-8", errors="ignore") as f:
+            with open(file_path, encoding="utf-8", errors="ignore") as f:
                 for line in f:
                     line = line.strip()
-                    if not line or line.startswith("#") or line.startswith("-"):
+                    if not line or line.startswith(("#", "-")):
                         continue
                     match = re.match(r"^([a-zA-Z0-9_.-]+)\s*([>=<~!]+)\s*([0-9a-zA-Z.*]+(?:[,\s]+[<>=!~]+\s*[0-9a-zA-Z.*]+)*)", line)
                     if match:
@@ -438,7 +428,7 @@ class DependencyScanner:
     def _scan_package_json(self, file_path: str) -> DependencyScanResult:
         result = DependencyScanResult(file_path=file_path, package_manager=PackageManager.NPM)
         try:
-            with open(file_path, "r", encoding="utf-8") as f:
+            with open(file_path, encoding="utf-8") as f:
                 data = json.load(f)
             for name, version in data.get("dependencies", {}).items():
                 result.dependencies.append(Dependency(
@@ -474,7 +464,7 @@ class DependencyScanner:
     def _scan_package_lock(self, file_path: str) -> DependencyScanResult:
         result = DependencyScanResult(file_path=file_path, package_manager=PackageManager.NPM)
         try:
-            with open(file_path, "r", encoding="utf-8") as f:
+            with open(file_path, encoding="utf-8") as f:
                 data = json.load(f)
             packages = data.get("packages", data.get("dependencies", {}))
             for pkg_path, info in packages.items():
@@ -493,7 +483,7 @@ class DependencyScanner:
         result = DependencyScanResult(file_path=file_path, package_manager=PackageManager.GO)
         try:
             seen = set()
-            with open(file_path, "r", encoding="utf-8") as f:
+            with open(file_path, encoding="utf-8") as f:
                 for line in f:
                     parts = line.strip().split()
                     if len(parts) >= 2:
@@ -540,7 +530,7 @@ class DependencyScanner:
     def _scan_pipfile_lock(self, file_path: str) -> DependencyScanResult:
         result = DependencyScanResult(file_path=file_path, package_manager=PackageManager.PIP)
         try:
-            with open(file_path, "r", encoding="utf-8") as f:
+            with open(file_path, encoding="utf-8") as f:
                 data = json.load(f)
             for section in ("default", "develop"):
                 for name, info in data.get(section, {}).items():
@@ -557,7 +547,7 @@ class DependencyScanner:
     def _scan_poetry_lock(self, file_path: str) -> DependencyScanResult:
         result = DependencyScanResult(file_path=file_path, package_manager=PackageManager.PIP)
         try:
-            with open(file_path, "r", encoding="utf-8") as f:
+            with open(file_path, encoding="utf-8") as f:
                 content = f.read()
             for match in re.finditer(r'name = "([^"]+)"\nversion = "([^"]+)"', content):
                 result.dependencies.append(Dependency(

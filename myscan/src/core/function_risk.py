@@ -15,9 +15,8 @@ Scores every function based on:
 from __future__ import annotations
 
 import ast
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from enum import Enum
-from typing import Optional
 
 
 class FunctionRiskLevel(Enum):
@@ -94,7 +93,7 @@ class FunctionRiskScorer:
         function_node: ast.FunctionDef | ast.AsyncFunctionDef,
         file_path: str = "",
         content: str = "",
-        findings: Optional[list] = None,
+        findings: list | None = None,
     ) -> FunctionRiskProfile:
         profile = FunctionRiskProfile(
             function_name=function_node.name,
@@ -131,7 +130,7 @@ class FunctionRiskScorer:
         self,
         file_path: str,
         content: str,
-        findings: Optional[list] = None,
+        findings: list | None = None,
     ) -> list[FunctionRiskProfile]:
         try:
             tree = ast.parse(content)
@@ -148,13 +147,7 @@ class FunctionRiskScorer:
     def _calculate_complexity(self, node: ast.FunctionDef | ast.AsyncFunctionDef) -> int:
         complexity = 1
         for child in ast.walk(node):
-            if isinstance(child, (ast.If, ast.While, ast.For, ast.AsyncFor)):
-                complexity += 1
-            elif isinstance(child, ast.ExceptHandler):
-                complexity += 1
-            elif isinstance(child, (ast.And, ast.Or)):
-                complexity += 1
-            elif isinstance(child, ast.Assert):
+            if isinstance(child, (ast.If, ast.While, ast.For, ast.AsyncFor, ast.ExceptHandler, ast.And, ast.Or, ast.Assert)):
                 complexity += 1
             elif isinstance(child, ast.BoolOp):
                 complexity += len(child.values) - 1

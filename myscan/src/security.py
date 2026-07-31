@@ -145,17 +145,16 @@ def check_rate_limit() -> tuple[bool, int]:
 def apply_cors(response):
     """Set CORS headers on a response based on the configured allowlist."""
     origin = request.headers.get("Origin")
-    if origin:
-        if origin in CORS_ORIGINS or "*" in CORS_ORIGINS:
-            response.headers["Access-Control-Allow-Origin"] = origin
-            response.headers["Vary"] = "Origin"
-            response.headers["Access-Control-Allow-Headers"] = (
-                "Content-Type, Authorization, X-API-Key"
-            )
-            response.headers["Access-Control-Allow-Methods"] = (
-                "GET, POST, PUT, DELETE, OPTIONS"
-            )
-            response.headers["Access-Control-Max-Age"] = "3600"
+    if origin and (origin in CORS_ORIGINS or "*" in CORS_ORIGINS):
+        response.headers["Access-Control-Allow-Origin"] = origin
+        response.headers["Vary"] = "Origin"
+        response.headers["Access-Control-Allow-Headers"] = (
+            "Content-Type, Authorization, X-API-Key"
+        )
+        response.headers["Access-Control-Allow-Methods"] = (
+            "GET, POST, PUT, DELETE, OPTIONS"
+        )
+        response.headers["Access-Control-Max-Age"] = "3600"
     return response
 
 
@@ -188,10 +187,7 @@ def _is_blocked_ip(ip: str) -> bool:
     # Normalize IPv4-mapped IPv6 like ::ffff:192.168.0.1
     if isinstance(addr, ipaddress.IPv6Address) and addr.ipv4_mapped:
         addr = addr.ipv4_mapped
-    for net in _PRIVATE_NETS:
-        if addr in net:
-            return True
-    return False
+    return any(addr in net for net in _PRIVATE_NETS)
 
 
 def _host_for_url(url: str) -> str:
@@ -217,8 +213,8 @@ def validate_remote_target(url: str) -> None:
     # Resolve the hostname; block private/loopback/link-local addresses.
     try:
         infos = socket.getaddrinfo(host, None)
-    except socket.gaierror:
-        raise ValueError(f"Could not resolve host: {host}")
+    except socket.gaierror as e:
+        raise ValueError(f"Could not resolve host: {host}") from e
     for info in infos:
         ip = info[4][0]
         if _is_blocked_ip(ip):

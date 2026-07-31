@@ -14,9 +14,8 @@ Scores every file based on:
 
 from __future__ import annotations
 
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from enum import Enum
-from typing import Optional
 
 
 class RiskLevel(Enum):
@@ -186,7 +185,7 @@ class FileRiskScorer:
         in_function = False
         for line in content.split("\n"):
             stripped = line.strip()
-            if stripped.startswith("def ") or stripped.startswith("async def "):
+            if stripped.startswith(("def ", "async def ")):
                 in_function = True
             if in_function:
                 if any(kw in stripped for kw in ["if ", "elif ", "for ", "while ", "try:", "except", "with "]):

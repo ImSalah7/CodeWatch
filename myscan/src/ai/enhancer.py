@@ -19,9 +19,9 @@ import json
 import logging
 import os
 import threading
-from typing import Any, Optional
+from typing import Any
 
-from .llm_client import LLMClient, SYSTEM_PROMPT_SECURITY
+from .llm_client import SYSTEM_PROMPT_SECURITY, LLMClient
 
 logger = logging.getLogger(__name__)
 
@@ -29,7 +29,7 @@ _ENHANCE_FIELDS = ("why_vulnerable", "impact", "exploit_scenario", "fix_suggesti
 
 _cache: dict[str, dict[str, str]] = {}
 _cache_lock = threading.Lock()
-_enabled_flag: Optional[bool] = None
+_enabled_flag: bool | None = None
 _flag_lock = threading.Lock()
 
 
@@ -108,7 +108,7 @@ def _apply_fields(finding: Any, fields: dict[str, str]) -> None:
             setattr(finding, attr, value)
 
 
-def _enhance_one(finding: Any, client: LLMClient) -> Optional[str]:
+def _enhance_one(finding: Any, client: LLMClient) -> str | None:
     """Enhance one finding; returns 'enhanced', 'cached', or None on failure."""
     key = _cache_key(finding)
     with _cache_lock:

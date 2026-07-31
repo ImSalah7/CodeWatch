@@ -12,11 +12,9 @@ Generates code transformation suggestions for each vulnerability type:
 
 from __future__ import annotations
 
-import re
 import difflib
+import re
 from dataclasses import dataclass, field
-from typing import Optional
-
 
 RISK_REDUCTION_ESTIMATES = {
     "sql_injection": 0.95,

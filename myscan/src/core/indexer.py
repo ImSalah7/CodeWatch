@@ -19,7 +19,6 @@ import os
 from dataclasses import dataclass, field
 from enum import Enum
 from pathlib import Path
-from typing import Optional
 
 
 class FileCategory(Enum):
@@ -275,7 +274,7 @@ def _index_file(file_path: Path, root: Path) -> FileIndex:
     line_count = 0
     if category not in (FileCategory.VENDOR, FileCategory.GENERATED, FileCategory.UNKNOWN):
         try:
-            with open(file_path, "r", encoding="utf-8", errors="ignore") as f:
+            with open(file_path, encoding="utf-8", errors="ignore") as f:
                 line_count = sum(1 for _ in f)
         except (OSError, PermissionError):
             pass

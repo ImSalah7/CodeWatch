@@ -12,7 +12,6 @@ from __future__ import annotations
 import hashlib
 import re
 from dataclasses import dataclass, field
-from typing import Optional
 
 
 @dataclass
@@ -169,7 +168,9 @@ def format_dedup_summary(findings: list[DeduplicatedFinding]) -> str:
     by_severity = {}
     for f in findings:
         by_severity[f.severity] = by_severity.get(f.severity, 0) + 1
-    for sev in ["CRITICAL", "HIGH", "MEDIUM", "LOW", "INFO"]:
-        if sev in by_severity:
-            lines.append(f"  {sev}: {by_severity[sev]}")
+    lines.extend(
+        f"  {sev}: {by_severity[sev]}"
+        for sev in ["CRITICAL", "HIGH", "MEDIUM", "LOW", "INFO"]
+        if sev in by_severity
+    )
     return "\n".join(lines)

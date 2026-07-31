@@ -1,6 +1,5 @@
 """Deliberately vulnerable sample app used by the integration test suite."""
 
-import os
 import pickle
 import sqlite3
 import subprocess

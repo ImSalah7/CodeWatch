@@ -6,11 +6,10 @@ When no API key is configured, falls back to static explanations.
 
 from __future__ import annotations
 
-import os
-import json
 import logging
+import os
+import time
 from dataclasses import dataclass
-from typing import Optional
 
 logger = logging.getLogger(__name__)
 
@@ -30,8 +29,8 @@ class LLMClient:
 
     def __init__(
         self,
-        provider: Optional[str] = None,
-        model: Optional[str] = None,
+        provider: str | None = None,
+        model: str | None = None,
         temperature: float = 0.3,
         max_tokens: int = 2048,
     ):
@@ -97,7 +96,7 @@ class LLMClient:
                 logger.warning("google-generativeai package not installed. Run: pip install google-generativeai")
                 self._provider = "none"
 
-    def chat(self, prompt: str, system_prompt: Optional[str] = None) -> Optional[LLMResponse]:
+    def chat(self, prompt: str, system_prompt: str | None = None) -> LLMResponse | None:
         """Send a chat request and return the response."""
         if not self.available:
             return None
@@ -121,7 +120,7 @@ class LLMClient:
             return None
         return None
 
-    def _chat_openai(self, prompt: str, system_prompt: Optional[str], start: float) -> Optional[LLMResponse]:
+    def _chat_openai(self, prompt: str, system_prompt: str | None, start: float) -> LLMResponse | None:
         messages = []
         if system_prompt:
             messages.append({"role": "system", "content": system_prompt})
@@ -143,7 +142,7 @@ class LLMClient:
             latency_ms=(time.time() - start) * 1000,
         )
 
-    def _chat_anthropic(self, prompt: str, system_prompt: Optional[str], start: float) -> Optional[LLMResponse]:
+    def _chat_anthropic(self, prompt: str, system_prompt: str | None, start: float) -> LLMResponse | None:
         kwargs = {
             "model": self._model,
             "max_tokens": self.max_tokens,
@@ -166,7 +165,7 @@ class LLMClient:
             latency_ms=(time.time() - start) * 1000,
         )
 
-    def _chat_google(self, prompt: str, system_prompt: Optional[str], start: float) -> Optional[LLMResponse]:
+    def _chat_google(self, prompt: str, system_prompt: str | None, start: float) -> LLMResponse | None:
         model = self._client.GenerativeModel(
             self._model,
             system_instruction=system_prompt or None,
@@ -207,8 +206,8 @@ def enhance_explanation(
     file_path: str = "",
     line: int = 0,
     severity: str = "",
-    client: Optional[LLMClient] = None,
-) -> Optional[str]:
+    client: LLMClient | None = None,
+) -> str | None:
     """Use LLM to generate an enhanced explanation for a finding.
 
     Returns enhanced explanation text, or None if LLM is unavailable.

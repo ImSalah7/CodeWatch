@@ -1,7 +1,6 @@
 """Tests for quality scanner."""
 
-import pytest
-from src.core.models import Language, FindingCategory
+from src.core.models import Language
 from src.scanners.quality_scanner import QualityScanner
 
 

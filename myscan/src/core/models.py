@@ -3,11 +3,10 @@
 from __future__ import annotations
 
 import hashlib
-import json
 from dataclasses import dataclass, field
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from enum import Enum
-from typing import Any, Optional
+from typing import Any
 
 from ..__init__ import __version__
 
@@ -178,8 +177,8 @@ class Finding:
     location: CodeLocation
     cwe: str = ""
     cwe_name: str = ""
-    owasp: Optional[OWASPTop10] = None
-    cvss: Optional[CVSS] = None
+    owasp: OWASPTop10 | None = None
+    cvss: CVSS | None = None
     fix_suggestion: str = ""
     fixed_code: str = ""
     references: list[str] = field(default_factory=list)
@@ -263,8 +262,8 @@ class ScanResult:
     files_scanned: int = 0
     lines_scanned: int = 0
     scan_duration: float = 0.0
-    scan_start: datetime = field(default_factory=lambda: datetime.now(timezone.utc))
-    scan_end: Optional[datetime] = None
+    scan_start: datetime = field(default_factory=lambda: datetime.now(UTC))
+    scan_end: datetime | None = None
     languages_detected: dict[str, int] = field(default_factory=dict)
     skipped_files: int = 0
     skipped_reasons: dict[str, int] = field(default_factory=dict)
@@ -363,15 +362,15 @@ class ScanResult:
 
     def filter_false_positives(self):
         """Apply smart filtering to reduce false positives."""
-        from ..core.smart_filter import SmartFilter
         from ..core.config import ScanConfig
+        from ..core.smart_filter import SmartFilter
         sf = SmartFilter(ScanConfig())
         self.findings = sf.filter_findings(self.findings)
 
     def filter_false_positives_with_validation(self, validation_pipeline):
         """Apply smart filtering + validation pipeline to reduce false positives."""
-        from ..core.smart_filter import SmartFilter
         from ..core.config import ScanConfig
+        from ..core.smart_filter import SmartFilter
         sf = SmartFilter(ScanConfig())
         self.findings = sf.filter_findings(self.findings)
         validated: list[Finding] = []

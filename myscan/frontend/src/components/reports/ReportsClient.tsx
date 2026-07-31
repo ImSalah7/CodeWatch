@@ -4,26 +4,22 @@ import { useEffect, useState, useMemo } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import {
   Search,
-  Filter,
   Download,
   ChevronDown,
   ChevronUp,
   ExternalLink,
   Copy,
-  FileCode,
   MapPin,
   Shield,
-  AlertTriangle,
   X,
   Wrench,
 } from "lucide-react";
 import { getFindings, getHistory, generateFixes, downloadReport } from "@/lib/api";
 import { SeverityBadge } from "@/components/ui/SeverityBadge";
-import { cn, severityColor, formatNumber } from "@/lib/utils";
+import { cn, severityColor } from "@/lib/utils";
 import type { Finding, ScanJob } from "@/lib/types";
 
 const categories = ["All", "Security", "Quality", "Secret", "Configuration", "Dependency"];
-const severities = ["All", "Critical", "High", "Medium", "Low", "Info"];
 
 interface GeneratedFix {
   rule_id: string;
@@ -56,22 +52,20 @@ export function ReportsClient() {
   useEffect(() => {
     getHistory(20)
       .then((h) => {
-        setJobs(h.history || []);
-        const completed = (h.history || []).filter((j) => j.status === "completed");
+        const history = h.history || [];
+        setJobs(history);
+        const completed = history.filter((j) => j.status === "completed");
         if (completed.length > 0) {
           setSelectedJob(completed[0].job_id);
+        } else {
+          setLoading(false);
         }
       })
-      .catch(() => {});
+      .catch(() => setLoading(false));
   }, []);
 
   useEffect(() => {
-    if (!selectedJob) {
-      setLoading(false);
-      return;
-    }
-    setLoading(true);
-    setFixes([]);
+    if (!selectedJob) return;
     getFindings({ job_id: selectedJob, limit: 200 })
       .then((res) => {
         setFindings(res.findings || []);
@@ -208,7 +202,11 @@ export function ReportsClient() {
 
           <select
             value={selectedJob}
-            onChange={(e) => setSelectedJob(e.target.value)}
+            onChange={(e) => {
+              setSelectedJob(e.target.value);
+              setLoading(true);
+              setFixes([]);
+            }}
             className="input h-9 w-48 text-xs bg-surface"
           >
             {jobs
@@ -284,7 +282,7 @@ export function ReportsClient() {
               <span className="w-16 text-right">Conf.</span>
             </div>
 
-            {filtered.map((f, i) => {
+            {filtered.map((f) => {
               const id = `${f.rule_id}-${f.location.file_path}-${f.location.line}`;
               const expanded = expandedId === id;
               return (
@@ -438,9 +436,9 @@ function FindingDetail({ finding }: { finding: Finding }) {
 
   return (
     <div className="space-y-3">
-      {(finding as any).fingerprint && (
+      {finding.fingerprint && (
         <a
-          href={`/findings/${encodeURIComponent((finding as any).fingerprint)}`}
+          href={`/findings/${encodeURIComponent(finding.fingerprint)}`}
           className="inline-flex items-center gap-1 text-[11px] text-accent hover:underline"
         >
           View Full Details

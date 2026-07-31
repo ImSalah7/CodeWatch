@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 from dataclasses import dataclass, field
-from typing import Optional
 
 from .models import CVSS, FindingCategory, Language, OWASPTop10, Severity
 
@@ -18,7 +17,7 @@ class Rule:
     category: FindingCategory
     cwe: str = ""
     cwe_name: str = ""
-    owasp: Optional[OWASPTop10] = None
+    owasp: OWASPTop10 | None = None
     languages: list[Language] = field(default_factory=list)
     fix_suggestion: str = ""
     references: list[str] = field(default_factory=list)

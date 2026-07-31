@@ -7,10 +7,8 @@ Only reports vulnerabilities when tainted data actually reaches a dangerous sink
 from __future__ import annotations
 
 from dataclasses import dataclass, field
-from typing import Optional
-from .ast_analyzer import (
-    PythonASTResult, CallInfo, AssignmentInfo, SOURCES, SINKS
-)
+
+from .ast_analyzer import SOURCES, CallInfo, PythonASTResult
 
 
 @dataclass
@@ -70,7 +68,7 @@ SANITIZERS = {
     "os.path.join", "os.path.realpath",
     "Path", "pathlib.Path",
     "BaseHTTPRequestHandler", "validate",
-    "sanitize", "clean", "filter",
+    "sanitize", "filter",
 }
 
 

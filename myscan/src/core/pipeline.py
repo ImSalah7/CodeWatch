@@ -8,32 +8,29 @@ Each phase enriches findings with more evidence, improving accuracy.
 
 from __future__ import annotations
 
-import os
 import time
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Optional
 
 from .ast_analyzer import (
-    analyze_python_ast, PythonASTResult, CallInfo, SOURCES,
+    SOURCES,
+    CallInfo,
+    PythonASTResult,
+    analyze_python_ast,
 )
-from .dataflow import analyze_data_flow, DataFlowResult, TaintPath
-from .context_analyzer import (
-    analyze_eval_context, analyze_password_context, analyze_injection_context,
-    EvalContext, PasswordContext, InjectionContext,
-)
-from .confidence import calculate_confidence, ConfidenceResult, ConfidenceLevel
-from .risk_scorer import assess_risk, RiskAssessment, RiskLevel
-from .deduplicator import deduplicate_findings, DeduplicatedFinding
-from .indexer import index_repository, RepositoryIndex, FileCategory, FileIndex
-from .validation_engine import ValidationPipeline
 from .call_graph import CallGraph
-from .semantic_analyzer import analyze_semantics, SemanticSafety
-from .symbol_table import build_symbol_table, SymbolTable
-from .reachability import analyze_reachability, ReachabilityStatus
-from .root_cause import generate_root_cause, enrich_finding_with_root_cause
 from .code_context import ensure_code_snippet, get_code_context
-from .import_resolver import build_import_table, ImportResolutionResult
+from .confidence import calculate_confidence
+from .dataflow import DataFlowResult, analyze_data_flow
+from .deduplicator import DeduplicatedFinding, deduplicate_findings
+from .import_resolver import build_import_table
+from .indexer import FileCategory, FileIndex, index_repository
+from .reachability import analyze_reachability
+from .risk_scorer import RiskAssessment, RiskLevel, assess_risk
+from .root_cause import enrich_finding_with_root_cause
+from .semantic_analyzer import analyze_semantics
+from .symbol_table import build_symbol_table
+from .validation_engine import ValidationPipeline
 
 
 @dataclass
@@ -60,9 +57,9 @@ class EnrichedFinding:
     code_snippet: str
     confidence: float
     confidence_level: str
-    risk_assessment: Optional[RiskAssessment] = None
-    ast_result: Optional[PythonASTResult] = None
-    dataflow_result: Optional[DataFlowResult] = None
+    risk_assessment: RiskAssessment | None = None
+    ast_result: PythonASTResult | None = None
+    dataflow_result: DataFlowResult | None = None
     is_user_controlled: bool = False
     is_constant: bool = False
     is_sanitized: bool = False
@@ -118,7 +115,7 @@ class AnalysisPipeline:
         include_docs: bool = False,
         include_examples: bool = False,
         min_confidence: float = 0.15,
-        custom_rules: Optional[list] = None,
+        custom_rules: list | None = None,
         validate_findings: bool = True,
     ):
         self.include_tests = include_tests
@@ -132,7 +129,7 @@ class AnalysisPipeline:
     def analyze_file(self, file_path: str) -> EnrichedFinding:
         """Analyze a single file through all phases."""
         try:
-            with open(file_path, "r", encoding="utf-8", errors="ignore") as f:
+            with open(file_path, encoding="utf-8", errors="ignore") as f:
                 source_code = f.read()
         except (OSError, PermissionError) as e:
             return EnrichedFinding(
@@ -205,7 +202,7 @@ class AnalysisPipeline:
 
         for file_index in scannable_files:
             try:
-                with open(file_index.path, "r", encoding="utf-8", errors="ignore") as f:
+                with open(file_index.path, encoding="utf-8", errors="ignore") as f:
                     source_code = f.read()
             except (OSError, PermissionError) as e:
                 result.errors.append(f"Cannot read {file_index.path}: {e}")
@@ -323,9 +320,8 @@ class AnalysisPipeline:
                 ef, file_contents, symbol_table, reachability_result
             )
 
-        dedup_input = []
-        for ef in findings_for_dedup:
-            dedup_input.append(type("Finding", (), {
+        dedup_input = [
+            type("Finding", (), {
                 "finding_id": ef.finding_id,
                 "rule_id": ef.rule_id,
                 "message": ef.message,
@@ -339,7 +335,9 @@ class AnalysisPipeline:
                 "cvss_score": ef.risk_assessment.cvss.overall_score if ef.risk_assessment else 0.0,
                 "fix_suggestion": ef.fix_suggestion,
                 "value": "",
-            })())
+            })()
+            for ef in findings_for_dedup
+        ]
 
         deduped = deduplicate_findings(dedup_input)
         result.deduplicated_findings = deduped
@@ -400,8 +398,8 @@ class AnalysisPipeline:
             ef.fix_suggestion = enriched_dict["fix_suggestion"]
 
         if reachability_result and hasattr(reachability_result, "functions"):
-            func_key = f"{ef.file_path}::{ef.rule_id.split('-')[-1].lower()}"
-            for fkey, freach in reachability_result.functions.items():
+            f"{ef.file_path}::{ef.rule_id.split('-')[-1].lower()}"
+            for freach in reachability_result.functions.values():
                 if freach.file_path == ef.file_path and abs(freach.line - ef.line_number) <= 3:
                     ef.reachability = freach.status.value
                     break
@@ -412,8 +410,8 @@ class AnalysisPipeline:
         file_path: str,
         ast_result: PythonASTResult,
         dataflow_result: DataFlowResult,
-        file_index: Optional[FileIndex] = None,
-        semantic_result: Optional[object] = None,
+        file_index: FileIndex | None = None,
+        semantic_result: object | None = None,
     ) -> list[EnrichedFinding]:
         """Analyze code with pre-computed AST and data flow results."""
         findings: list[EnrichedFinding] = []
@@ -460,7 +458,7 @@ class AnalysisPipeline:
         file_category: FileCategory,
         ast_result: PythonASTResult,
         dataflow_result: DataFlowResult,
-    ) -> Optional[EnrichedFinding]:
+    ) -> EnrichedFinding | None:
         """Create an enriched finding from a dangerous sink call."""
         line_num = call.line
         if line_num < 1 or line_num > len(lines):
@@ -557,13 +555,13 @@ class AnalysisPipeline:
         file_category: FileCategory,
         ast_result: PythonASTResult,
         dataflow_result: DataFlowResult,
-    ) -> Optional[EnrichedFinding]:
+    ) -> EnrichedFinding | None:
         """Create an enriched finding from a specific dangerous call."""
         line_num = call.line
         if line_num < 1 or line_num > len(lines):
             return None
 
-        line_content = lines[line_num - 1]
+        lines[line_num - 1]
         category = self._classify_call(call)
         severity = "HIGH" if call.name in ("eval", "exec") else "MEDIUM"
 

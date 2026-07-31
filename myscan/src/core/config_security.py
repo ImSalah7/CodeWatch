@@ -12,10 +12,9 @@ Analyzes infrastructure configuration files for security issues:
 from __future__ import annotations
 
 import re
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from enum import Enum
 from pathlib import Path
-from typing import Optional
 
 
 class ConfigType(Enum):
@@ -235,7 +234,7 @@ class ConfigSecurityScanner:
 
         return findings
 
-    def scan_file(self, file_path: str, config_type: Optional[ConfigType] = None) -> list[ConfigFinding]:
+    def scan_file(self, file_path: str, config_type: ConfigType | None = None) -> list[ConfigFinding]:
         path = Path(file_path)
         if config_type is None:
             config_type = self._identify_config(path)
@@ -293,9 +292,10 @@ class ConfigSecurityScanner:
         if path.suffix in (".yml", ".yaml"):
             try:
                 content = path.read_text(encoding="utf-8", errors="ignore")[:500]
-                if any(kw in content for kw in self.K8S_KEYWORDS):
-                    if any(kind in content for kind in self.K8S_KINDS):
-                        return ConfigType.KUBERNETES
+                if any(kw in content for kw in self.K8S_KEYWORDS) and any(
+                    kind in content for kind in self.K8S_KINDS
+                ):
+                    return ConfigType.KUBERNETES
             except Exception:
                 pass
 
