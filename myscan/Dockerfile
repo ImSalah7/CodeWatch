@@ -2,12 +2,17 @@ FROM python:3.13-slim
 
 WORKDIR /app
 
+ENV PYTHONDONTWRITEBYTECODE=1 \
+    PYTHONUNBUFFERED=1
+
 COPY requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
 
-COPY . .
+COPY pyproject.toml ./
+COPY src/ src/
+COPY run_api.py ./
 RUN pip install --no-cache-dir -e .
 
-EXPOSE 8501
+EXPOSE 8443
 
-ENTRYPOINT ["streamlit", "run", "dashboard.py", "--server.port=8501", "--server.address=0.0.0.0"]
+CMD ["python", "run_api.py"]

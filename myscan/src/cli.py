@@ -29,6 +29,7 @@ from rich.table import Table
 from rich.panel import Panel
 from rich.text import Text
 
+from .__init__ import __version__
 from .core.config import ScanConfig
 from .core.engine import ScanEngine
 from .core.models import FindingCategory
@@ -59,7 +60,7 @@ def _prepare_target(target: str, quiet: bool = False) -> tuple[str, bool]:
 
 
 @click.group()
-@click.version_option(version="2.0.0", prog_name="MyScan")
+@click.version_option(version=__version__, prog_name="MyScan")
 def cli():
     """MyScan - Enterprise AI-Powered SAST Platform"""
     pass
@@ -119,7 +120,7 @@ def scan(target, output, fmt, local, no_deps, no_quality, no_secrets, no_securit
             threads=threads,
         )
 
-        mode_label = "[bold cyan]MyScan v2.0.0 Enterprise[/bold cyan]" if enterprise else "[bold cyan]MyScan v2.0.0[/bold cyan]"
+        mode_label = f"[bold cyan]MyScan v{__version__} Enterprise[/bold cyan]" if enterprise else f"[bold cyan]MyScan v{__version__}[/bold cyan]"
         console.print(Panel(f"{mode_label} - Enterprise SAST Platform", style="blue"))
         console.print(f"Target: [green]{target}[/green]")
         if enterprise:
@@ -196,7 +197,7 @@ def info():
     """Show scanner information."""
     from .core.rules import ALL_RULES
 
-    console.print(Panel("[bold cyan]MyScan v2.0.0[/bold cyan]", style="blue"))
+    console.print(Panel(f"[bold cyan]MyScan v{__version__}[/bold cyan]", style="blue"))
 
     table = Table(title="Scanner Modules")
     table.add_column("Module", style="bold")
@@ -238,7 +239,7 @@ def _print_results(result):
     console.rule("[bold]MyScan Results[/bold]")
     console.print(f"\n[{risk_color} bold]Risk Score: {result.risk_score}/100 | Grade: {result.grade}[/{risk_color} bold]\n")
 
-    table = Table(title="Security Findings by Severity")
+    table = Table(title="Findings by Severity")
     table.add_column("Severity", style="bold")
     table.add_column("Count", justify="right")
 

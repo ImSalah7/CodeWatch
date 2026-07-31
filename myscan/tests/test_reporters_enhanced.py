@@ -206,7 +206,7 @@ class TestEnhancedReporters:
         assert sarif["version"] == "2.1.0"
         assert len(sarif["runs"]) == 1
         assert len(sarif["runs"][0]["results"]) == 3
-        assert sarif["runs"][0]["tool"]["driver"]["version"] == "2.0.0"
+        assert sarif["runs"][0]["tool"]["driver"]["version"] == "3.0.0"
 
     def test_sarif_reporter_has_cvss(self):
         from src.reporters.sarif import SARIFReporter
@@ -259,8 +259,8 @@ class TestEnhancedReporters:
         result = self._make_result()
         json_str = JSONReporter().generate(result)
         data = json.loads(json_str)
-        assert data["schemaVersion"] == "2.0.0"
-        assert data["tool"]["version"] == "2.0.0"
+        assert data["schemaVersion"] == "3.0.0"
+        assert data["tool"]["version"] == "3.0.0"
         assert len(data["findings"]) == 3
         assert "scan" in data
         assert "summary" in data

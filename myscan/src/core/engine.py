@@ -21,11 +21,12 @@ from .smart_filter import SmartFilter
 class ScanEngine:
     """Main scan engine that orchestrates all scanning modules."""
 
-    def __init__(self, config: ScanConfig, enterprise_mode: bool = False, validate_findings: bool = True):
+    def __init__(self, config: ScanConfig, enterprise_mode: bool = False, validate_findings: bool = True, progress_tracker=None):
         self.config = config
         self.filter = SmartFilter(config)
         self.enterprise_mode = enterprise_mode
         self.validate_findings = validate_findings
+        self.progress_tracker = progress_tracker
         self.scanners: list = []
         self._validation_pipeline = None
         if validate_findings:
@@ -59,13 +60,30 @@ class ScanEngine:
         files = self._collect_files(target_path)
         result.files_scanned = len(files)
 
+        tracker = self.progress_tracker
+        if tracker:
+            tracker.total_files = len(files)
+            tracker.phase = "collecting"
+            tracker.emit("init", {"total_files": len(files)})
+
         for file_path in files:
+            if tracker:
+                if tracker.cancelled:
+                    raise RuntimeError("Scan cancelled by user")
+                while tracker.paused:
+                    time.sleep(0.5)
+                    if tracker.cancelled:
+                        raise RuntimeError("Scan cancelled by user")
+                tracker.on_file_start(str(file_path))
+
             rel = file_path.relative_to(target_path)
             try:
                 content = file_path.read_text(encoding="utf-8", errors="ignore")
             except (OSError, PermissionError):
                 result.skipped_files += 1
                 result.skipped_reasons["read_error"] = result.skipped_reasons.get("read_error", 0) + 1
+                if tracker:
+                    tracker.on_file_done(str(file_path))
                 continue
 
             lines = content.splitlines()
@@ -78,11 +96,20 @@ class ScanEngine:
             for scanner in self.scanners:
                 try:
                     findings = scanner.scan_file(content, str(rel), language)
+                    new_findings = 0
                     for f in findings:
                         result.findings.extend([f])
+                        new_findings += 1
+                        if tracker and new_findings <= 5:
+                            tracker.on_finding(f.to_dict())
+                    if tracker and new_findings > 5:
+                        tracker.findings_count += new_findings - 5
                 except Exception:
                     result.skipped_files += 1
                     continue
+
+            if tracker:
+                tracker.on_file_done(str(file_path))
 
         result.deduplicate()
         if self._validation_pipeline:
@@ -91,6 +118,8 @@ class ScanEngine:
             result.filter_false_positives()
         result.scan_end = __import__("datetime").datetime.now(__import__("datetime").timezone.utc)
         result.scan_duration = time.time() - start
+        if tracker:
+            tracker.on_complete(result.to_dict()["summary"])
         return result
 
     def _scan_enterprise(self, target_path: Path, result: ScanResult, start: float) -> ScanResult:
@@ -113,7 +142,14 @@ class ScanEngine:
         repo_result = pipeline.analyze_repository(str(target_path))
 
         result.files_scanned = repo_result.file_count
-        result.lines_scanned = 0
+        lines = 0
+        for p in target_path.rglob("*"):
+            if p.is_file() and p.suffix in (".py", ".js", ".ts", ".jsx", ".tsx", ".java", ".go", ".php", ".cs", ".rs", ".c", ".h", ".cpp", ".rb", ".kt", ".swift", ".sh"):
+                try:
+                    lines += len(p.read_text(encoding="utf-8", errors="ignore").splitlines())
+                except (OSError, PermissionError):
+                    pass
+        result.lines_scanned = lines
 
         result._enterprise_metrics = {
             "functionsAnalyzed": repo_result.functions_analyzed,
@@ -252,7 +288,6 @@ class ScanEngine:
             result.findings.append(finding)
 
         result.deduplicate()
-        result.filter_false_positives()
         result.scan_end = __import__("datetime").datetime.now(__import__("datetime").timezone.utc)
         result.scan_duration = time.time() - start
         return result

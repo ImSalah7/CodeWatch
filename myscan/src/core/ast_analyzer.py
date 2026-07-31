@@ -151,11 +151,14 @@ def _visit_module(node: ast.Module, result: PythonASTResult, content: str):
         elif isinstance(child, ast.ImportFrom):
             _visit_import_from(child, result)
         elif isinstance(child, ast.FunctionDef):
-            result.functions.append(_visit_function(child, lines))
+            func = _visit_function(child, lines)
+            result.functions.append(func)
+            result.calls.extend(func.calls)
         elif isinstance(child, ast.AsyncFunctionDef):
             func = _visit_function(child, lines)
             func.is_async = True
             result.functions.append(func)
+            result.calls.extend(func.calls)
         elif isinstance(child, ast.ClassDef):
             cls = _visit_class(child, lines)
             result.classes.append(cls)
@@ -214,7 +217,8 @@ def _visit_function(node, lines: list[str], scope: str = "") -> FunctionDef:
 
     for child in ast.walk(node):
         if isinstance(child, ast.Call):
-            func.calls.append(_visit_call(child, lines))
+            call_info = _visit_call(child, lines)
+            func.calls.append(call_info)
         elif isinstance(child, ast.Assign):
             _visit_assignment(child, None, lines)
             for target in child.targets:

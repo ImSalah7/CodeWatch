@@ -148,6 +148,214 @@ KNOWN_VULNERABILITIES = {
 }
 
 
+_PRE_LABELS = {"a", "alpha", "b", "beta", "c", "rc", "pre", "preview", "dev"}
+
+
+def _split_pre(main: str) -> tuple[str, str | None]:
+    """Split a PEP 440 release like '1.0.0rc1' into ('1.0.0', 'rc1')."""
+    for m in re.finditer(r"[0-9]+|[a-zA-Z]+", main):
+        if m.group() in _PRE_LABELS:
+            return main[:m.start()], main[m.start():]
+    return main, None
+
+
+def _version_key(version: str) -> tuple:
+    """Parse a version string into a comparable key (semver-aware)."""
+    version = str(version).strip().lstrip("=vV ")
+    version = version.split("+", 1)[0]
+    if not version or version in ("*", "x", "X"):
+        return (0, (1,))
+    main, _, pre = version.partition("-")
+    if not pre:
+        main, pre = _split_pre(main)
+    core = tuple(
+        int(t) if t.isdigit() else t
+        for t in re.findall(r"[0-9]+|[a-zA-Z]+", main) or ("0",)
+    )
+    if pre:
+        prek = tuple(
+            int(t) if t.isdigit() else t
+            for t in re.findall(r"[0-9]+|[a-zA-Z]+", pre) or (0,)
+        )
+        return core + ((0, prek),)
+    return core + ((1,),)
+
+
+def _cmp_tokens(x, y) -> int:
+    if isinstance(x, int) and isinstance(y, int):
+        return (x > y) - (x < y)
+    if isinstance(x, str) and isinstance(y, str):
+        return (x > y) - (x < y)
+    return -1 if isinstance(x, int) else 1
+
+
+def _cmp_keys(a: tuple, b: tuple) -> int:
+    """Compare two version keys. Missing components pad with 0."""
+    ca, ta = a[:-1], a[-1]
+    cb, tb = b[:-1], b[-1]
+    n = max(len(ca), len(cb))
+    for i in range(n):
+        x = ca[i] if i < len(ca) else 0
+        y = cb[i] if i < len(cb) else 0
+        r = _cmp_tokens(x, y)
+        if r:
+            return r
+    return (ta[0] > tb[0]) - (ta[0] < tb[0])
+
+
+def _cmp_versions(a: str, b: str) -> int:
+    return _cmp_keys(_version_key(a), _version_key(b))
+
+
+def _release_parts(version: str) -> list[int]:
+    m = re.match(r"^\s*v?(\d+(?:\.\d+)*)", str(version))
+    if not m:
+        return []
+    return [int(x) for x in m.group(1).split(".")]
+
+
+def _join_parts(parts: list[int]) -> str:
+    return ".".join(str(p) for p in parts)
+
+
+def _bounds_one(spec: str) -> tuple:
+    """Parse a single spec clause into (lo, lo_incl, hi, hi_incl) bounds."""
+    spec = spec.strip().rstrip(",")
+    if not spec or spec in ("*", "x", "X"):
+        return (None, True, None, True)
+    if re.search(r"(\.\*|\.x)$", spec, re.IGNORECASE):
+        base = spec[:-2]
+        parts = _release_parts(base)
+        if not parts:
+            return (None, True, None, True)
+        if len(parts) == 1:
+            hi = [parts[0] + 1]
+        else:
+            hi = [parts[0], parts[1] + 1]
+        return (_version_key(base), True, _version_key(_join_parts(hi)), False)
+    m = re.match(r"^\s*(?P<op>\^|~=|>=|<=|==|=|>|<|~|!=)?\s*(?P<ver>.+?)\s*$", spec)
+    op = (m.group("op") or "").strip() if m else ""
+    ver = (m.group("ver").strip() if m else spec).rstrip(",")
+    if not op or op in ("==", "="):
+        return (_version_key(ver), True, _version_key(ver), True)
+    if op in (">=", ">"):
+        return (_version_key(ver), True, None, True)
+    if op == "<":
+        return (None, True, _version_key(ver), False)
+    if op == "<=":
+        return (None, True, _version_key(ver), True)
+    if op == "!=":
+        return (None, True, None, True)
+    if op == "~=":
+        parts = _release_parts(ver)
+        if not parts:
+            return (None, True, None, True)
+        if len(parts) == 1:
+            hi = [parts[0] + 1]
+        else:
+            hi = parts[:-2] + [parts[-2] + 1]
+        return (_version_key(ver), True, _version_key(_join_parts(hi)), False)
+    if op == "^":
+        parts = _release_parts(ver)
+        if not parts:
+            return (None, True, None, True)
+        if parts[0] > 0:
+            hi = [parts[0] + 1]
+        elif len(parts) >= 2 and parts[1] > 0:
+            hi = [0, parts[1] + 1]
+        else:
+            hi = [0, 0, parts[2] + 1] if len(parts) >= 3 else [0, 1]
+        return (_version_key(ver), True, _version_key(_join_parts(hi)), False)
+    if op == "~":
+        parts = _release_parts(ver)
+        if not parts:
+            return (None, True, None, True)
+        if len(parts) == 1:
+            hi = [parts[0] + 1]
+        else:
+            hi = [parts[0], parts[1] + 1]
+        return (_version_key(ver), True, _version_key(_join_parts(hi)), False)
+    return (_version_key(ver), True, _version_key(ver), True)
+
+
+def _split_clauses(spec: str) -> list[str]:
+    toks = [t for t in re.split(r"[,\s]+", spec) if t]
+    clauses = []
+    i = 0
+    while i < len(toks):
+        t = toks[i]
+        if len(t) == 1 and t[0] in "<>=!~^" and i + 1 < len(toks):
+            clauses.append(t + toks[i + 1])
+            i += 2
+        else:
+            clauses.append(t)
+            i += 1
+    return clauses
+
+
+def _parse_version_spec(spec: str) -> list:
+    """Parse a version spec into a list of (lo, lo_incl, hi, hi_incl) bounds.
+
+    Each list element is one '||' union clause; bounds are inclusive-lower /
+    exclusive-upper by convention and may be None (unbounded).
+    """
+    spec = spec.strip()
+    if not spec:
+        return [(None, True, None, True)]
+    groups = []
+    for part in re.split(r"\s*\|\|\s*", spec):
+        part = part.strip()
+        if not part:
+            continue
+        if " - " in part:
+            low, _, high = part.partition(" - ")
+            lb = _bounds_one(low)
+            hb = _bounds_one(high)
+            groups.append((lb[0], lb[1], hb[2], hb[3]))
+            continue
+        lo, lo_incl, hi, hi_incl = None, True, None, True
+        for clause in _split_clauses(part):
+            b = _bounds_one(clause)
+            if b[0] is not None:
+                if lo is None:
+                    lo, lo_incl = b[0], b[1]
+                else:
+                    c = _cmp_keys(b[0], lo)
+                    if c > 0:
+                        lo, lo_incl = b[0], b[1]
+                    elif c == 0:
+                        lo_incl = lo_incl or b[1]
+            if b[2] is not None:
+                if hi is None:
+                    hi, hi_incl = b[2], b[3]
+                else:
+                    c = _cmp_keys(b[2], hi)
+                    if c < 0:
+                        hi, hi_incl = b[2], b[3]
+                    elif c == 0:
+                        hi_incl = hi_incl or b[3]
+        groups.append((lo, lo_incl, hi, hi_incl))
+    return groups or [(None, True, None, True)]
+
+
+def _hi_ge_lo(hi, hi_incl: bool, lo, lo_incl: bool) -> bool:
+    if hi is None or lo is None:
+        return True
+    c = _cmp_keys(hi, lo)
+    if c > 0:
+        return True
+    if c < 0:
+        return False
+    return hi_incl and lo_incl
+
+
+def _bounds_overlap(a: tuple, b: tuple) -> bool:
+    return (
+        _hi_ge_lo(a[2], a[3], b[0], b[1])
+        and _hi_ge_lo(b[2], b[3], a[0], a[1])
+    )
+
+
 class DependencyScanner:
     """Scans dependencies for known vulnerabilities."""
 
@@ -214,7 +422,7 @@ class DependencyScanner:
                     line = line.strip()
                     if not line or line.startswith("#") or line.startswith("-"):
                         continue
-                    match = re.match(r"^([a-zA-Z0-9_.-]+)\s*([>=<~!]+)\s*([0-9a-zA-Z.*]+)", line)
+                    match = re.match(r"^([a-zA-Z0-9_.-]+)\s*([>=<~!]+)\s*([0-9a-zA-Z.*]+(?:[,\s]+[<>=!~]+\s*[0-9a-zA-Z.*]+)*)", line)
                     if match:
                         result.dependencies.append(Dependency(
                             name=match.group(1).lower(),
@@ -364,8 +572,18 @@ class DependencyScanner:
     def _check_vulnerabilities(self, result: DependencyScanResult) -> None:
         for dep in result.dependencies:
             name_lower = dep.name.lower()
-            if name_lower in KNOWN_VULNERABILITIES:
-                for vuln_info in KNOWN_VULNERABILITIES[name_lower]:
+            if name_lower not in KNOWN_VULNERABILITIES:
+                continue
+            dep_bounds = _parse_version_spec(dep.version)
+            for vuln_info in KNOWN_VULNERABILITIES[name_lower]:
+                vuln_bounds = [
+                    b
+                    for v in vuln_info.get("versions", [])
+                    for b in _parse_version_spec(v)
+                ]
+                if not vuln_bounds:
+                    continue
+                if any(_bounds_overlap(db, vb) for db in dep_bounds for vb in vuln_bounds):
                     result.vulnerabilities.append(Vulnerability(
                         dependency_name=dep.name,
                         dependency_version=dep.version,

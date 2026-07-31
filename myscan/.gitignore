@@ -1,3 +1,4 @@
+# Python
 __pycache__/
 *.pyc
 *.pyo
@@ -7,4 +8,28 @@ build/
 .mypy_cache/
 .pytest_cache/
 *.egg
+.venv/
+venv/
+
+# Runtime state (local scans, settings, database)
+myscan.db
+*.db
+*.db-journal
+myscan_settings.json
+myscan_reports/
+e2e_report.json
+
+# Environment
 .env
+.env.local
+
+# Node / frontend
+node_modules/
+frontend/node_modules/
+frontend/.next/
+frontend/out/
+
+# Logs / misc
+*.log
+.DS_Store
+Thumbs.db

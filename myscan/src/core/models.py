@@ -9,6 +9,8 @@ from datetime import datetime, timezone
 from enum import Enum
 from typing import Any, Optional
 
+from ..__init__ import __version__
+
 
 class Severity(Enum):
     CRITICAL = "critical"
@@ -208,9 +210,19 @@ class Finding:
             "cwe_name": self.cwe_name,
             "owasp": {"code": self.owasp.code, "title": self.owasp.title} if self.owasp else None,
             "cvss": {"score": self.cvss.base_score, "vector": self.cvss.vector, "severity": self.cvss.severity.value} if self.cvss else None,
+            "cvss_score": self.cvss.base_score if self.cvss else None,
             "file": self.location.file_path,
             "line": self.location.line,
             "end_line": self.location.end_line,
+            "location": {
+                "file_path": self.location.file_path,
+                "line": self.location.line,
+                "end_line": self.location.end_line,
+                "column": self.location.column,
+                "code_snippet": self.location.code_snippet,
+                "function": self.location.function,
+                "class": self.location.class_name,
+            },
             "function": self.location.function,
             "class": self.location.class_name,
             "code_snippet": self.location.code_snippet,
@@ -225,6 +237,8 @@ class Finding:
             "tags": self.tags,
             "fingerprint": self.fingerprint,
             "raw_secret": self.raw_secret,
+            "reachability": getattr(self, "reachability", ""),
+            "root_cause": getattr(self, "root_cause", ""),
         }
 
 
@@ -255,13 +269,13 @@ class ScanResult:
     @property
     def severity_counts(self) -> dict[str, int]:
         counts = {"critical": 0, "high": 0, "medium": 0, "low": 0, "info": 0}
-        for f in self.security_findings:
+        for f in self.findings:
             counts[f.severity.value] += 1
         return counts
 
     @property
     def risk_score(self) -> int:
-        score = sum(f.severity.weight * f.confidence for f in self.security_findings)
+        score = sum(f.severity.weight * f.confidence for f in self.findings)
         return min(int(score), 100)
 
     @property
@@ -334,7 +348,7 @@ class ScanResult:
     def to_dict(self) -> dict[str, Any]:
         return {
             "tool": "MyScan",
-            "version": "1.0.0",
+            "version": __version__,
             "scan_start": self.scan_start.isoformat(),
             "scan_end": self.scan_end.isoformat() if self.scan_end else None,
             "scan_duration": round(self.scan_duration, 2),

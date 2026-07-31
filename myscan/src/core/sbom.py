@@ -20,6 +20,7 @@ from datetime import datetime, timezone
 from typing import Optional
 
 from .dependency_scanner import Dependency, DependencyScanResult, PackageManager
+from ..__init__ import __version__
 
 
 @dataclass
@@ -58,7 +59,7 @@ class SBOMDocument:
                 "tools": [{
                     "vendor": "MyScan",
                     "name": "MyScan Enterprise",
-                    "version": "2.0.0",
+                    "version": __version__,
                 }],
                 "component": {
                     "type": "application",
@@ -104,7 +105,7 @@ class SBOMDocument:
             "documentNamespace": f"https://github.com/myscan/{self.name}",
             "creationInfo": {
                 "created": self.timestamp or datetime.now(timezone.utc).isoformat(),
-                "creators": ["Tool: MyScan Enterprise 2.0.0"],
+                "creators": [f"Tool: MyScan Enterprise {__version__}"],
                 "licenseListVersion": "3.21",
             },
             "packages": [],

@@ -1,12 +1,35 @@
 services:
-  myscan:
-    build: .
+  api:
+    build:
+      context: .
     ports:
-      - "8501:8501"
+      - "8443:8443"
     environment:
+      - MYSCAN_API_KEY=${MYSCAN_API_KEY:-}
+      - MYSCAN_RATE_LIMIT=${MYSCAN_RATE_LIMIT:-300}
+      - MYSCAN_RATE_LIMIT_BURST=${MYSCAN_RATE_LIMIT_BURST:-60}
+      - MYSCAN_CORS_ORIGINS=${MYSCAN_CORS_ORIGINS:-http://localhost:3000,http://127.0.0.1:3000}
+      - MYSCAN_ALLOWED_PATHS=${MYSCAN_ALLOWED_PATHS:-/data/targets}
+      - MYSCAN_DB=${MYSCAN_DB:-/data/myscan.db}
+      - MYSCAN_TRUST_PROXY=${MYSCAN_TRUST_PROXY:-0}
       - OPENAI_API_KEY=${OPENAI_API_KEY:-}
       - ANTHROPIC_API_KEY=${ANTHROPIC_API_KEY:-}
       - MYSCAN_AI_PROVIDER=${MYSCAN_AI_PROVIDER:-openai}
     volumes:
-      - ./myscan_reports:/app/myscan_reports
+      - myscan_data:/data
     restart: unless-stopped
+
+  frontend:
+    build:
+      context: ./frontend
+    ports:
+      - "3000:3000"
+    environment:
+      - API_BASE_URL=http://api:8443
+      - MYSCAN_API_KEY=${MYSCAN_API_KEY:-}
+    depends_on:
+      - api
+    restart: unless-stopped
+
+volumes:
+  myscan_data:

@@ -4,9 +4,14 @@ __pycache__/
 *.pyc
 *.egg-info/
 myscan_reports/
-.venv
 .git/
 .gitignore
 *.md
 !README.md
 e2e_report.json
+frontend/.next/
+frontend/node_modules/
+frontend/next.log
+frontend/next_stdout.log
+frontend/next_stderr.log
+*.db

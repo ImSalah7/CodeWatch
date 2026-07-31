@@ -20,7 +20,7 @@ class SARIFReporter:
                 "tool": {
                     "driver": {
                         "name": "MyScan",
-                        "version": "2.0.0",
+                        "version": "3.0.0",
                         "informationUri": "https://github.com/myscan/myscan",
                         "rules": self._extract_rules(result),
                         "properties": {

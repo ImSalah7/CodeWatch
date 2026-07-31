@@ -553,6 +553,70 @@ class TestDependencyScanner:
             assert result is not None
             assert result.total_dependencies == 0
 
+    def test_fixed_or_safe_versions_not_flagged(self):
+        with tempfile.TemporaryDirectory() as tmpdir:
+            req_file = Path(tmpdir) / "requirements.txt"
+            req_file.write_text(
+                "requests==2.20.0\nrequests==2.28.0\nflask==1.0\npyyaml==5.4\n"
+                "urllib3==1.26.6\n"
+            )
+            scanner = DependencyScanner()
+            result = scanner.scan_file(str(req_file))
+            assert result is not None
+            assert result.vulnerabilities == []
+            assert result.critical_vulns == result.high_vulns == 0
+
+    def test_exact_vulnerable_versions_flagged(self):
+        with tempfile.TemporaryDirectory() as tmpdir:
+            req_file = Path(tmpdir) / "requirements.txt"
+            req_file.write_text("requests==2.19.0\n")
+            scanner = DependencyScanner()
+            result = scanner.scan_file(str(req_file))
+            assert result is not None
+            vulns = [v for v in result.vulnerabilities if v.dependency_name == "requests"]
+            assert len(vulns) == 1
+            assert vulns[0].vulnerability_id == "CVE-2018-18074"
+            assert vulns[0].fixed_version == "2.20.0"
+
+    def test_upper_bound_excludes_fixed_version(self):
+        with tempfile.TemporaryDirectory() as tmpdir:
+            req_file = Path(tmpdir) / "requirements.txt"
+            req_file.write_text("pyyaml==5.3\npyyaml==5.4\npyyaml==5.5\n")
+            scanner = DependencyScanner()
+            result = scanner.scan_file(str(req_file))
+            assert result is not None
+            pyyaml_vulns = [v for v in result.vulnerabilities if v.dependency_name == "pyyaml"]
+            assert len(pyyaml_vulns) == 1
+            assert pyyaml_vulns[0].dependency_version == "5.3"
+
+    def test_lower_bound_ranges_not_flagged(self):
+        with tempfile.TemporaryDirectory() as tmpdir:
+            req_file = Path(tmpdir) / "requirements.txt"
+            req_file.write_text("requests>=2.20.0\nrequests==2.20.0,<3.0\n")
+            scanner = DependencyScanner()
+            result = scanner.scan_file(str(req_file))
+            assert result is not None
+            assert all(v.dependency_name != "requests" for v in result.vulnerabilities)
+
+    def test_wide_ranges_still_flagged_conservatively(self):
+        with tempfile.TemporaryDirectory() as tmpdir:
+            req_file = Path(tmpdir) / "requirements.txt"
+            req_file.write_text("requests~=2.19\nrequests<2.20.0\n")
+            scanner = DependencyScanner()
+            result = scanner.scan_file(str(req_file))
+            assert result is not None
+            req_vulns = [v for v in result.vulnerabilities if v.dependency_name == "requests"]
+            assert len(req_vulns) >= 1
+
+    def test_version_comparison_semantics(self):
+        from src.core.dependency_scanner import _cmp_versions
+        assert _cmp_versions("1.0", "1.0.0") == 0
+        assert _cmp_versions("2.19.0", "2.20.0") < 0
+        assert _cmp_versions("2023.7.21", "2023.7.22") < 0
+        assert _cmp_versions("2.20.1", "2.20.0") > 0
+        assert _cmp_versions("1.0.0rc1", "1.0.0") < 0
+        assert _cmp_versions("1.0.1", "1.0.0") > 0
+
 
 # ============================================================
 # Config Security Scanner Tests

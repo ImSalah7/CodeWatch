@@ -162,7 +162,7 @@ tr:hover {{ background: rgba(59, 130, 246, 0.05); }}
 {'<div class="section"><h2>Secret Findings (' + str(len(secs)) + ')</h2><table><thead><tr><th>Severity</th><th>Title</th><th>Location</th><th>Fix</th></tr></thead><tbody>' + secret_rows + '</tbody></table></div>' if secs else ''}
 
 <div class="footer">
-<p>MyScan v2.0.0 Enterprise - AI-Powered SAST Platform</p>
+<p>MyScan v3.0.0 Enterprise - AI-Powered SAST Platform</p>
 </div>
 </div>
 </body>

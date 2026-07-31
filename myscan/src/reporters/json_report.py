@@ -7,6 +7,7 @@ from datetime import datetime, timezone
 from typing import Any
 
 from ..core.models import FindingCategory, ScanResult, SecretDisplayMode
+from ..__init__ import __version__
 
 
 class JSONReporter:
@@ -16,10 +17,10 @@ class JSONReporter:
         secret_display = getattr(result, '_secret_display_mode', 'smart')
 
         report: dict[str, Any] = {
-            "schemaVersion": "2.0.0",
+            "schemaVersion": "3.0.0",
             "tool": {
                 "name": "MyScan",
-                "version": "2.0.0",
+                "version": __version__,
                 "enterpriseMode": getattr(result, '_enterprise_mode', False),
             },
             "scan": {
