@@ -119,6 +119,66 @@ def test_finding_by_fingerprint_enriched(db):
     assert d["scan_date"]
 
 
+def test_finding_state_lifecycle(db):
+    store.save_findings("job1", [_sample_finding_dict()])
+    state = store.set_finding_state("job1", "abc123", suppressed=True)
+    assert state.get("suppressed") is True
+    assert store.get_scan_states("job1")["abc123"].get("suppressed") is True
+
+    store.set_finding_state("job1", "abc123", suppressed=False, is_false_positive=True)
+    state = store.get_scan_states("job1")["abc123"]
+    assert state.get("suppressed") is None
+    assert state.get("is_false_positive") is True
+
+    store.set_finding_state("job1", "abc123", assignee="alice", issue_url="https://github.com/o/1", notes="triaged")
+    state = store.get_scan_states("job1")["abc123"]
+    assert state["assignee"] == "alice"
+    assert state["issue_url"] == "https://github.com/o/1"
+    assert state["notes"] == "triaged"
+
+
+def test_findings_state_filters(db):
+    f1 = _sample_finding_dict()
+    f2 = _sample_finding_dict()
+    f2["fingerprint"] = "fp2"
+    f2["rule_id"] = "SEC002"
+    store.save_findings("job1", [f1, f2])
+    store.set_finding_state("job1", "abc123", suppressed=True)
+    store.set_finding_state("job1", "fp2", is_false_positive=True)
+
+    total, findings = store.get_findings(scan_id="job1", status="false_positive", include_suppressed=True)
+    assert total == 1 and findings[0]["fingerprint"] == "fp2"
+
+    total, findings = store.get_findings(scan_id="job1", status="real", include_suppressed=True)
+    assert total == 1 and findings[0]["fingerprint"] == "abc123"
+
+    total, findings = store.get_findings(scan_id="job1", include_suppressed=False)
+    assert total == 1 and findings[0]["fingerprint"] == "fp2"
+
+    total, findings = store.get_findings(scan_id="job1", include_suppressed=True)
+    assert total == 2
+    by_fp = {f["fingerprint"]: f for f in findings}
+    assert by_fp["abc123"]["state"]["suppressed"] is True
+    assert by_fp["fp2"]["state"]["is_false_positive"] is True
+
+
+def test_findings_sort(db):
+    findings = []
+    for i in range(3):
+        f = _sample_finding_dict()
+        f["fingerprint"] = f"s{i}"
+        f["severity"] = ["critical", "low", "high"][i]
+        f["location"]["line"] = f["line"] = [7, 100, 30][i]
+        findings.append(f)
+    store.save_findings("job1", findings)
+    _, findings = store.get_findings(scan_id="job1", sort="severity", order="asc")
+    assert [f["severity"] for f in findings] == ["critical", "high", "low"]
+    _, findings = store.get_findings(scan_id="job1", sort="severity", order="desc")
+    assert [f["severity"] for f in findings] == ["low", "high", "critical"]
+    _, findings = store.get_findings(scan_id="job1", sort="line", order="asc")
+    assert [f["line"] for f in findings] == [7, 30, 100]
+
+
 def test_global_search(db):
     for i in range(3):
         f = _sample_finding_dict()

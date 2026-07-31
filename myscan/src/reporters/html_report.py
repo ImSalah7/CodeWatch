@@ -7,6 +7,7 @@ from html import escape as html_escape
 from typing import Optional
 
 from ..core.models import FindingCategory, ScanResult, SecretDisplayMode
+from ..__init__ import __version__
 
 
 class HTMLReporter:
@@ -111,7 +112,8 @@ tr:hover {{ background: rgba(59, 130, 246, 0.05); }}
 <div class="container">
 <div class="header">
 <h1>MyScan Enterprise Security Report</h1>
-<p class="subtitle">Generated: {datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M UTC")} | Files scanned: {result.files_scanned} | Duration: {result.scan_duration:.1f}s | Lines: {result.lines_scanned:,}</p>
+<p class="subtitle">Repository: {html_escape(getattr(result, 'repository', '') or 'N/A')} | Branch: {html_escape(getattr(result, 'branch', '') or 'N/A')} | Commit: {html_escape(getattr(result, 'commit', '') or 'N/A')} | Scan ID: {html_escape(getattr(result, 'scan_id', '') or 'N/A')}</p>
+<p class="subtitle">Generated: {datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M UTC")} | Scanner: MyScan v{__version__} | Files scanned: {result.files_scanned} | Rules executed: {getattr(result, 'rules_executed', 0)} | Duration: {result.scan_duration:.1f}s | Lines: {result.lines_scanned:,}</p>
 </div>
 
 {secret_warning}
@@ -162,7 +164,7 @@ tr:hover {{ background: rgba(59, 130, 246, 0.05); }}
 {'<div class="section"><h2>Secret Findings (' + str(len(secs)) + ')</h2><table><thead><tr><th>Severity</th><th>Title</th><th>Location</th><th>Fix</th></tr></thead><tbody>' + secret_rows + '</tbody></table></div>' if secs else ''}
 
 <div class="footer">
-<p>MyScan v3.0.0 Enterprise - AI-Powered SAST Platform</p>
+<p>MyScan v{__version__} Enterprise - AI-Powered SAST Platform</p>
 </div>
 </div>
 </body>
@@ -190,7 +192,7 @@ tr:hover {{ background: rgba(59, 130, 246, 0.05); }}
             color = colors.get(f.severity.value, "#6b7280")
             bg = bgs.get(f.severity.value, "rgba(107,114,128,0.1)")
 
-            refs_html = "".join(f'<a href="{html_escape(r)}" target="_blank">Ref {j+1}</a>' for j, r in enumerate(f.references[:3]))
+            refs_html = "".join(f'<a href="{html_escape(r)}" target="_blank">Ref {j+1}</a>' for j, r in enumerate(f.references[:5]))
             code_html = self._format_code_snippet(f.location.code_snippet, f.location.line) if f.location.code_snippet else ""
             fix_html = f'<div class="fix-block"><strong>Fix:</strong><pre>{html_escape(f.fix_suggestion)}</pre></div>' if f.fix_suggestion else ""
             fixed_code_html = ""
@@ -199,6 +201,15 @@ tr:hover {{ background: rgba(59, 130, 246, 0.05); }}
             explanation_html = f'<div class="explanation"><strong>Why Vulnerable:</strong> {html_escape(f.why_vulnerable or f.description)}</div>' if (f.why_vulnerable or f.description) else ""
             impact_html = f'<div class="detail-box"><div class="label">Impact</div><div class="value">{html_escape(f.impact)}</div></div>' if f.impact else ""
             exploit_html = f'<div class="explanation" style="border-color:rgba(239,68,68,0.2);background:rgba(239,68,68,0.05);color:#fca5a5"><strong>Exploit Scenario:</strong><pre style="margin-top:8px;white-space:pre-wrap">{html_escape(f.exploit_scenario)}</pre></div>' if f.exploit_scenario else ""
+            root_cause = getattr(f, "root_cause", "") or ""
+            root_cause_html = f'<div class="explanation" style="border-color:rgba(139,92,246,0.25);background:rgba(139,92,246,0.06);color:#c4b5fd"><strong>Root Cause:</strong> {html_escape(root_cause)}</div>' if root_cause else ""
+            evidence_html = ""
+            if f.evidence:
+                evidence_items = "".join(f'<li>{html_escape(e.get("detail", ""))}</li>' for e in f.evidence[:5] if e.get("detail"))
+                if evidence_items:
+                    evidence_html = f'<div class="detail-box"><div class="label">Evidence</div><ul style="margin:0;padding-left:16px;font-size:12px;">{evidence_items}</ul></div>'
+            occurrence_html = f'<span class="meta">| Occurrences: {f.occurrences}</span>' if f.occurrences > 1 else ""
+            fp_badge = '<span style="background:#22c55e;color:#052e16;padding:2px 8px;border-radius:4px;font-size:11px;font-weight:700;">FALSE POSITIVE</span>' if f.is_false_positive else ""
             cvss_html = ""
             if f.cvss and f.cvss.base_score > 0:
                 cvss_color = "#dc2626" if f.cvss.base_score >= 9 else "#ea580c" if f.cvss.base_score >= 7 else "#ca8a04" if f.cvss.base_score >= 4 else "#2563eb"
@@ -214,7 +225,9 @@ tr:hover {{ background: rgba(59, 130, 246, 0.05); }}
 <span class="meta">{html_escape(f.location.file_path)}:{f.location.line}</span>
 {cwe_html}
 {owasp_html}
+{occurrence_html}
 <span class="meta">| Confidence: {f.confidence:.0%}</span>
+{fp_badge}
 </div>
 <div class="finding-body">
 <div class="desc">{html_escape(f.description[:200])}</div>
@@ -226,7 +239,9 @@ tr:hover {{ background: rgba(59, 130, 246, 0.05); }}
 </div>
 {cvss_html}
 {explanation_html}
+{root_cause_html}
 {exploit_html}
+{evidence_html}
 {impact_html}
 {code_html}
 {fix_html}

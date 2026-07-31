@@ -39,9 +39,13 @@ class SecurityScanner(BaseScanner):
                     continue
                 match = pattern.search(line)
                 if match:
+                    if not self._validate_match(rule, line):
+                        continue
                     snippet = self._get_context(lines, i - 1)
                     function_name = self._extract_function(lines, i - 1)
                     cvss = rule.get_cvss() if rule.cvss_config else None
+                    matched = match.group(0).strip()
+                    mechanism = self._detect_mechanism(rule, matched)
                     finding = Finding(
                         rule_id=rule.id,
                         title=rule.title,
@@ -53,6 +57,7 @@ class SecurityScanner(BaseScanner):
                         location=CodeLocation(
                             file_path=file_path,
                             line=i,
+                            column=match.start() + 1,
                             function=function_name,
                             code_snippet=snippet,
                         ),
@@ -63,12 +68,65 @@ class SecurityScanner(BaseScanner):
                         fix_suggestion=rule.fix_suggestion,
                         references=rule.references,
                         impact=rule.impact,
-                        why_vulnerable=self._explain(rule, snippet),
+                        why_vulnerable=self._explain(rule, snippet, matched, file_path, i, mechanism),
+                        confidence_reasoning=self._confidence_reasoning(rule, matched, i, mechanism),
                         tags=rule.tags,
+                        evidence=[{
+                            "type": "regex_match",
+                            "detail": (
+                                f"Rule {rule.id} matched at {file_path}:{i} "
+                                f"({mechanism}). Matched text: {matched[:200]!r}"
+                            ),
+                            "matched": matched[:500],
+                            "line": i,
+                            "column": match.start() + 1,
+                        }],
                     )
                     findings.append(finding)
 
         return findings
+
+    def _validate_match(self, rule: "Rule", line: str) -> bool:
+        """Post-validation to reject false positives a regex cannot express.
+
+        For SQL injection (SEC001), a parameterized execute() call such as
+        ``execute("SELECT ... %s", params)`` is safe even though the query
+        string contains a ``%s`` placeholder, so we drop those matches.
+        """
+        if rule.id != "SEC001":
+            return True
+        # If the query string is interpolated (f-string, concatenation,
+        # .format(), or %-formatting) it is dangerous regardless of whether an
+        # extra bind-parameter argument is also present.
+        interpolated = re.search(
+            r'f["\']|["\']\s*\+|\.\s*format\s*\(|["\']\s*%\s*[a-zA-Z(]',
+            line,
+        )
+        if interpolated:
+            return True
+        # Static literal query: parameterized call is safe when the second
+        # argument is a literal dict/tuple/list or an identifier that receives
+        # the bind parameters.
+        param_call = re.search(
+            r"(?:execute|executemany|executescript)\s*\([^)\n]*,\s*"
+            r"(?:\{[^}]*\}|\([^)]*\)|\[[^\]]*\]|self\.\w+|[a-zA-Z_]\w*)\s*\)\s*$",
+            line,
+        )
+        if param_call:
+            return False
+        return True
+
+    def _detect_mechanism(self, rule: "Rule", matched: str) -> str:
+        if rule.id == "SEC001":
+            if matched.startswith(("execute", "executemany", "executescript")) and re.search(r"f[\"']", matched):
+                return "f-string interpolation"
+            if re.search(r"\.\s*format\s*\(", matched):
+                return ".format() interpolation"
+            if re.search(r"[\"']\s*%\s*[a-zA-Z(]", matched):
+                return "% string formatting"
+            if re.search(r"[\"']\s*\+", matched):
+                return "string concatenation"
+        return "string formatting"
 
     def _get_context(self, lines: list[str], idx: int, context: int = 2) -> str:
         start = max(0, idx - context)
@@ -83,6 +141,20 @@ class SecurityScanner(BaseScanner):
                 return m.group(1)
         return ""
 
-    def _explain(self, rule: Rule, snippet: str) -> str:
-        short_snippet = snippet.split("\n")[-1].strip()[:100] if snippet else "matched pattern"
-        return f"{rule.title}: The code `{short_snippet}` {rule.description.lower()}"
+    def _explain(self, rule: Rule, snippet: str, matched: str, file_path: str, line: int, mechanism: str) -> str:
+        safe = f"`{matched[:160]}`"
+        return (
+            f"Rule {rule.id} ({rule.title}) matched at {file_path}:{line}.\n\n"
+            f"The code `{safe}` builds a SQL query using {mechanism}. Because the "
+            f"interpolated value is injected into the statement before the driver "
+            f"binds any parameters, an attacker-controlled value can alter the "
+            f"structure of the query (e.g. terminate the statement and append a "
+            f"new one). This enables {rule.description.lower()}"
+        )
+
+    def _confidence_reasoning(self, rule: Rule, matched: str, line: int, mechanism: str) -> str:
+        return (
+            f"Detected via pattern matching on line {line} ({mechanism}); the matched "
+            f"fragment was {matched[:120]!r}. Confidence reflects the rule default "
+            f"({rule.confidence:.0%}) for regex-level detection."
+        )

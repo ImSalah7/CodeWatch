@@ -87,12 +87,29 @@ CREATE TABLE IF NOT EXISTS findings (
     tags_json           TEXT,
     raw_secret          TEXT,
     reachability        TEXT,
-    root_cause          TEXT
+    root_cause          TEXT,
+    occurrences         INTEGER DEFAULT 1,
+    locations_json      TEXT,
+    evidence_json       TEXT
+);
+
+CREATE TABLE IF NOT EXISTS finding_state (
+    scan_id             TEXT NOT NULL,
+    fingerprint         TEXT NOT NULL,
+    suppressed          INTEGER DEFAULT 0,
+    is_false_positive   INTEGER DEFAULT 0,
+    assignee            TEXT,
+    issue_url           TEXT,
+    notes               TEXT,
+    updated_at          TEXT,
+    PRIMARY KEY (scan_id, fingerprint)
 );
 
 CREATE INDEX IF NOT EXISTS idx_findings_scan ON findings(scan_id);
 CREATE INDEX IF NOT EXISTS idx_findings_fp ON findings(fingerprint);
 CREATE INDEX IF NOT EXISTS idx_findings_sev ON findings(severity);
+CREATE INDEX IF NOT EXISTS idx_findings_rule ON findings(rule_id);
+CREATE INDEX IF NOT EXISTS idx_findings_lang ON findings(language);
 CREATE INDEX IF NOT EXISTS idx_scans_started ON scans(started_at);
 """
 
@@ -107,7 +124,23 @@ def init_store(db_path: Optional[str] = None) -> None:
     with closing(sqlite3.connect(_db_path)) as conn:
         conn.execute("PRAGMA journal_mode=WAL")
         conn.executescript(SCHEMA)
+        _migrate(conn)
         conn.commit()
+
+
+def _migrate(conn: sqlite3.Connection) -> None:
+    """Add columns introduced after the initial schema was deployed."""
+    existing = {
+        row[1] for row in conn.execute("PRAGMA table_info(findings)").fetchall()
+    }
+    additions = {
+        "occurrences": "ALTER TABLE findings ADD COLUMN occurrences INTEGER DEFAULT 1",
+        "locations_json": "ALTER TABLE findings ADD COLUMN locations_json TEXT",
+        "evidence_json": "ALTER TABLE findings ADD COLUMN evidence_json TEXT",
+    }
+    for name, ddl in additions.items():
+        if name not in existing:
+            conn.execute(ddl)
 
 
 def _connect() -> sqlite3.Connection:
@@ -129,6 +162,8 @@ def finding_row_to_dict(row) -> dict:
     """Convert a findings row to the same shape as Finding.to_dict()."""
     references = json.loads(row["references_json"]) if row["references_json"] else []
     tags = json.loads(row["tags_json"]) if row["tags_json"] else []
+    locations = json.loads(row["locations_json"]) if row["locations_json"] else []
+    evidence = json.loads(row["evidence_json"]) if row["evidence_json"] else []
     owasp = None
     if row["owasp_code"]:
         owasp = {"code": row["owasp_code"], "title": row["owasp_title"] or ""}
@@ -140,6 +175,38 @@ def finding_row_to_dict(row) -> dict:
             "severity": row["severity"] or "info",
         }
     file_path = row["file_path"] or ""
+    locations = locations or [{
+        "file": file_path,
+        "line": row["line"] or 0,
+        "end_line": row["end_line"] or row["line"] or 0,
+        "column": row["column_num"] or 0,
+    }]
+    row_keys = set(row.keys())
+
+    def _state_val(*names):
+        for name in names:
+            if name in row_keys:
+                value = row[name]
+                if value not in (None, 0, ""):
+                    return value
+        return None
+
+    state_fp = _state_val("state_fp", "is_false_positive")
+    suppressed = _state_val("state_suppressed", "suppressed")
+    assignee = _state_val("state_assignee", "assignee")
+    issue_url = _state_val("state_issue_url", "issue_url")
+    notes = _state_val("state_notes", "notes")
+    state: dict = {}
+    if suppressed:
+        state["suppressed"] = True
+    if state_fp:
+        state["is_false_positive"] = True
+    if assignee:
+        state["assignee"] = assignee
+    if issue_url:
+        state["issue_url"] = issue_url
+    if notes:
+        state["notes"] = notes
     return {
         "rule_id": row["rule_id"] or "",
         "title": row["title"] or "",
@@ -174,11 +241,15 @@ def finding_row_to_dict(row) -> dict:
         "exploit_scenario": row["exploit_scenario"] or "",
         "impact": row["impact"] or "",
         "why_vulnerable": row["why_vulnerable"] or "",
-        "is_false_positive": bool(row["is_false_positive"]),
+        "is_false_positive": bool(state_fp),
         "confidence_reasoning": row["confidence_reasoning"] or "",
         "tags": tags,
         "fingerprint": row["fingerprint"] or "",
         "raw_secret": row["raw_secret"] or "",
+        "evidence": evidence,
+        "occurrences": int(row["occurrences"] or 1),
+        "locations": locations,
+        "state": state,
         "reachability": row["reachability"] or "",
         "root_cause": row["root_cause"] or "",
     }
@@ -224,6 +295,9 @@ def _finding_to_row(scan_id: str, f: dict) -> tuple:
         f.get("raw_secret", ""),
         f.get("reachability", ""),
         f.get("root_cause", ""),
+        f.get("occurrences", 1) or 1,
+        json.dumps(f.get("locations", [])),
+        json.dumps(f.get("evidence", [])),
     )
 
 
@@ -277,6 +351,7 @@ _FINDING_COLUMNS = (
     "fix_suggestion", "fixed_code", "references_json", "exploit_scenario",
     "impact", "why_vulnerable", "is_false_positive", "confidence_reasoning",
     "tags_json", "raw_secret", "reachability", "root_cause",
+    "occurrences", "locations_json", "evidence_json",
 )
 
 
@@ -341,44 +416,103 @@ def count_scans() -> int:
     return int(row[0])
 
 
+_SORT_COLUMNS: dict[str, str] = {
+    "severity": "CASE severity WHEN 'critical' THEN 0 WHEN 'high' THEN 1 "
+                "WHEN 'medium' THEN 2 WHEN 'low' THEN 3 ELSE 4 END",
+    "cvss": "cvss_score",
+    "confidence": "confidence",
+    "file": "file_path",
+    "rule": "rule_id",
+    "line": "line",
+}
+
+
 def get_findings(
     scan_id: Optional[str] = None,
     category: str = "",
     severity: str = "",
+    rule_id: str = "",
+    cwe: str = "",
+    owasp: str = "",
+    min_cvss: float = 0.0,
+    language: str = "",
+    file_ext: str = "",
     min_confidence: float = 0.0,
     search: str = "",
+    include_suppressed: bool = False,
+    status: str = "",
+    sort: str = "",
+    order: str = "asc",
     limit: int = 100,
     offset: int = 0,
 ) -> tuple[int, list[dict]]:
     where = []
     params: list = []
     if scan_id:
-        where.append("scan_id = ?")
+        where.append("f.scan_id = ?")
         params.append(scan_id)
     if category:
-        where.append("LOWER(category) = ?")
+        where.append("LOWER(f.category) = ?")
         params.append(category.lower())
     if severity:
-        where.append("LOWER(severity) = ?")
+        where.append("LOWER(f.severity) = ?")
         params.append(severity.lower())
+    if rule_id:
+        where.append("LOWER(f.rule_id) = ?")
+        params.append(rule_id.lower())
+    if cwe:
+        where.append("LOWER(f.cwe) = ?")
+        params.append(cwe.lower())
+    if owasp:
+        where.append("LOWER(f.owasp_code) = ?")
+        params.append(owasp.lower())
+    if min_cvss > 0:
+        where.append("f.cvss_score >= ?")
+        params.append(min_cvss)
+    if language:
+        where.append("LOWER(f.language) = ?")
+        params.append(language.lower())
+    if file_ext:
+        where.append("LOWER(f.file_path) LIKE ?")
+        params.append(f"%{file_ext.lower()}%")
     if min_confidence > 0:
-        where.append("confidence >= ?")
+        where.append("f.confidence >= ?")
         params.append(min_confidence)
+    if not include_suppressed:
+        where.append("COALESCE(fs.suppressed, 0) = 0")
+    if status == "false_positive":
+        where.append("COALESCE(fs.is_false_positive, 0) = 1")
+    elif status == "real":
+        where.append("COALESCE(fs.is_false_positive, 0) = 0")
     if search:
         where.append(
-            "(LOWER(title) LIKE ? OR LOWER(rule_id) LIKE ? OR LOWER(file_path) LIKE ? "
-            "OR LOWER(cwe) LIKE ?)"
+            "(LOWER(f.title) LIKE ? OR LOWER(f.rule_id) LIKE ? OR LOWER(f.file_path) LIKE ? "
+            "OR LOWER(f.cwe) LIKE ? OR LOWER(f.description) LIKE ?)"
         )
         like = f"%{search.lower()}%"
-        params.extend([like, like, like, like])
+        params.extend([like, like, like, like, like])
 
+    from_clause = (
+        "FROM findings f LEFT JOIN finding_state fs "
+        "ON fs.scan_id = f.scan_id AND fs.fingerprint = f.fingerprint"
+    )
     where_sql = f" WHERE {' AND '.join(where)}" if where else ""
+    order_sql = ""
+    if sort in _SORT_COLUMNS:
+        direction = "DESC" if order == "desc" else "ASC"
+        order_sql = f" ORDER BY {_SORT_COLUMNS[sort]} {direction}, f.line ASC"
+    else:
+        order_sql = " ORDER BY f.id DESC"
+
     with closing(_connect()) as conn:
         total = conn.execute(
-            f"SELECT COUNT(*) FROM findings{where_sql}", params
+            f"SELECT COUNT(*) {from_clause}{where_sql}", params
         ).fetchone()[0]
         rows = conn.execute(
-            f"SELECT * FROM findings{where_sql} ORDER BY id DESC LIMIT ? OFFSET ?",
+            f"SELECT f.*, fs.suppressed AS state_suppressed, "
+            f"fs.is_false_positive AS state_fp, fs.assignee AS state_assignee, "
+            f"fs.issue_url AS state_issue_url, fs.notes AS state_notes "
+            f"{from_clause}{where_sql}{order_sql} LIMIT ? OFFSET ?",
             params + [int(limit), int(offset)],
         ).fetchall()
     return int(total), [finding_row_to_dict(r) for r in rows]
@@ -388,8 +522,13 @@ def get_finding_by_fingerprint(fingerprint: str) -> Optional[dict]:
     """Search a finding across all scans; enrich with scan metadata."""
     with closing(_connect()) as conn:
         row = conn.execute(
-            "SELECT f.*, s.target AS scan_target, s.completed_at AS scan_date "
+            "SELECT f.*, s.target AS scan_target, s.completed_at AS scan_date, "
+            "fs.suppressed AS state_suppressed, fs.is_false_positive AS state_fp, "
+            "fs.assignee AS state_assignee, fs.issue_url AS state_issue_url, "
+            "fs.notes AS state_notes "
             "FROM findings f JOIN scans s ON s.job_id = f.scan_id "
+            "LEFT JOIN finding_state fs ON fs.scan_id = f.scan_id "
+            "AND fs.fingerprint = f.fingerprint "
             "WHERE f.fingerprint = ? ORDER BY f.id DESC LIMIT 1",
             (fingerprint,),
         ).fetchone()
@@ -435,6 +574,72 @@ def global_search(q: str, limit: int = 50) -> list[dict]:
         })
     results.sort(key=lambda r: sev_rank.get(r.get("severity"), 99))
     return results
+
+
+# --------------------------------------------------------------------------
+# Finding triage state (suppress / false positive / assignee / issue)
+# --------------------------------------------------------------------------
+
+def set_finding_state(scan_id: str, fingerprint: str, **fields) -> dict:
+    """Create or update the triage state row for a finding.
+
+    Supported fields: suppressed, is_false_positive, assignee, issue_url, notes.
+    """
+    allowed = {"suppressed", "is_false_positive", "assignee", "issue_url", "notes"}
+    updates = {k: v for k, v in fields.items() if k in allowed}
+    if not updates:
+        with closing(_connect()) as conn:
+            row = conn.execute(
+                "SELECT suppressed, is_false_positive, assignee, issue_url, notes "
+                "FROM finding_state WHERE scan_id = ? AND fingerprint = ?",
+                (scan_id, fingerprint),
+            ).fetchone()
+        return _state_row_to_dict(row) if row else {}
+
+    updates["updated_at"] = _utcnow()
+    set_clause = ", ".join(f"{k} = excluded.{k}" for k in updates)
+    with closing(_connect()) as conn:
+        conn.execute(
+            f"""
+            INSERT INTO finding_state (scan_id, fingerprint, {", ".join(updates)})
+            VALUES (?, ?, {", ".join(["?"] * len(updates))})
+            ON CONFLICT(scan_id, fingerprint) DO UPDATE SET {set_clause}
+            """,
+            [scan_id, fingerprint] + list(updates.values()),
+        )
+        conn.commit()
+        row = conn.execute(
+            "SELECT suppressed, is_false_positive, assignee, issue_url, notes "
+            "FROM finding_state WHERE scan_id = ? AND fingerprint = ?",
+            (scan_id, fingerprint),
+        ).fetchone()
+    return _state_row_to_dict(row)
+
+
+def _state_row_to_dict(row) -> dict:
+    state: dict = {}
+    if row["suppressed"]:
+        state["suppressed"] = True
+    if row["is_false_positive"]:
+        state["is_false_positive"] = True
+    if row["assignee"]:
+        state["assignee"] = row["assignee"]
+    if row["issue_url"]:
+        state["issue_url"] = row["issue_url"]
+    if row["notes"]:
+        state["notes"] = row["notes"]
+    return state
+
+
+def get_scan_states(scan_id: str) -> dict[str, dict]:
+    """Return {fingerprint: state} for every triaged finding in a scan."""
+    with closing(_connect()) as conn:
+        rows = conn.execute(
+            "SELECT fingerprint, suppressed, is_false_positive, assignee, "
+            "issue_url, notes FROM finding_state WHERE scan_id = ?",
+            (scan_id,),
+        ).fetchall()
+    return {r["fingerprint"]: _state_row_to_dict(r) for r in rows}
 
 
 # --------------------------------------------------------------------------

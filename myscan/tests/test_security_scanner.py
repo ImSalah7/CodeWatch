@@ -10,11 +10,61 @@ class TestSecurityScanner:
         self.scanner = SecurityScanner()
 
     def test_sql_injection(self):
-        code = 'query = f"SELECT * FROM users WHERE id = {user_id}"'
+        code = 'cursor.execute(f"SELECT * FROM users WHERE id = {user_id}")'
         findings = self.scanner.scan_file(code, "app.py", Language.PYTHON)
         sql_findings = [f for f in findings if "SQL Injection" in f.title]
         assert len(sql_findings) >= 1
         assert sql_findings[0].cwe == "CWE-89"
+        assert sql_findings[0].occurrences == 1
+        assert sql_findings[0].evidence
+
+    def test_sql_injection_parameterized_dict_is_safe(self):
+        code = 'cursor.execute("SELECT * FROM users WHERE id = %s", {"id": user_id})'
+        findings = self.scanner.scan_file(code, "app.py", Language.PYTHON)
+        sql_findings = [f for f in findings if "SQL Injection" in f.title]
+        assert len(sql_findings) == 0
+
+    def test_sql_injection_parameterized_tuple_is_safe(self):
+        code = 'cursor.execute("SELECT * FROM users WHERE id = %s", (user_id,))'
+        findings = self.scanner.scan_file(code, "app.py", Language.PYTHON)
+        sql_findings = [f for f in findings if "SQL Injection" in f.title]
+        assert len(sql_findings) == 0
+
+    def test_sql_injection_parameterized_identifier_is_safe(self):
+        code = 'cursor.execute("SELECT * FROM users WHERE id = %s", params)'
+        findings = self.scanner.scan_file(code, "app.py", Language.PYTHON)
+        sql_findings = [f for f in findings if "SQL Injection" in f.title]
+        assert len(sql_findings) == 0
+
+    def test_sql_injection_concat_is_dangerous(self):
+        code = 'cursor.execute("SELECT * FROM users WHERE id = " + user_id)'
+        findings = self.scanner.scan_file(code, "app.py", Language.PYTHON)
+        sql_findings = [f for f in findings if "SQL Injection" in f.title]
+        assert len(sql_findings) >= 1
+
+    @pytest.mark.parametrize("code,expected", [
+        # Parameterized calls are safe (no regex match, no finding)
+        ('cursor.execute("SELECT * FROM users WHERE id = %s", {"id": user_id})', 0),
+        ('cursor.execute("SELECT * FROM users WHERE id = %s", (user_id,))', 0),
+        ('cursor.execute("SELECT * FROM users WHERE id = ?", [user_id])', 0),
+        ('cursor.execute("SELECT * FROM users WHERE id = %s", params)', 0),
+        ('cursor.execute("SELECT * FROM users WHERE id = %s", self.params)', 0),
+        ('cursor.execute("SELECT * FROM users WHERE id = ?", (user_id,))', 0),
+        ('cursor.execute("SELECT * FROM users WHERE id = ?")', 0),
+        # Interpolated queries remain dangerous (embedded quotes included)
+        ('cursor.execute(f"SELECT * FROM users WHERE id = {user_id}")', 1),
+        ("cursor.execute(f\"SELECT name FROM users WHERE id = '{user_id}'\")", 1),
+        ('cursor.execute("SELECT name FROM users WHERE id = \'" + user_id + "\'")', 1),
+        ('cursor.execute("SELECT * FROM users WHERE id = " + user_id)', 1),
+        ("cursor.execute('SELECT name FROM users WHERE id = \"' + user_id + '\"')", 1),
+        ('cursor.execute("SELECT * FROM users WHERE id = {}".format(user_id))', 1),
+        ('cursor.execute("SELECT * FROM users WHERE id = %s" % user_id)', 1),
+        ('cursor.executemany("INSERT INTO t VALUES (" + rows + ")", data)', 1),
+    ])
+    def test_sql_injection_parameterized_vs_interpolated(self, code, expected):
+        findings = self.scanner.scan_file(code, "app.py", Language.PYTHON)
+        sql_findings = [f for f in findings if "SQL Injection" in f.title]
+        assert len(sql_findings) == expected
 
     def test_command_injection(self):
         code = 'os.system("echo " + user_input)'
@@ -81,7 +131,7 @@ def safe_function():
         assert len(findings) == 0
 
     def test_skips_comments(self):
-        code = '# query = f"SELECT * FROM users WHERE id = {user_id}"'
+        code = '# cursor.execute(f"SELECT * FROM users WHERE id = {user_id}")'
         findings = self.scanner.scan_file(code, "app.py", Language.PYTHON)
         sql_findings = [f for f in findings if "SQL Injection" in f.title]
         assert len(sql_findings) == 0

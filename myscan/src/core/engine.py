@@ -116,8 +116,11 @@ class ScanEngine:
             result.filter_false_positives_with_validation(self._validation_pipeline)
         else:
             result.filter_false_positives()
+        result.group_duplicates()
         result.scan_end = __import__("datetime").datetime.now(__import__("datetime").timezone.utc)
         result.scan_duration = time.time() - start
+        result.rules_executed = len(ALL_RULES)
+        result.target = str(target_path)
         if tracker:
             tracker.on_complete(result.to_dict()["summary"])
         return result
@@ -288,8 +291,11 @@ class ScanEngine:
             result.findings.append(finding)
 
         result.deduplicate()
+        result.group_duplicates()
         result.scan_end = __import__("datetime").datetime.now(__import__("datetime").timezone.utc)
         result.scan_duration = time.time() - start
+        result.rules_executed = len(ALL_RULES)
+        result.target = str(target_path)
         return result
 
     def _collect_files(self, root: Path) -> list[Path]:

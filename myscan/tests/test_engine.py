@@ -62,7 +62,7 @@ class TestScanEngine:
     def test_local_scan(self):
         with tempfile.TemporaryDirectory() as tmpdir:
             test_file = Path(tmpdir) / "app.py"
-            test_file.write_text('query = f"SELECT * FROM users WHERE id = {user_id}"')
+            test_file.write_text('cursor.execute(f"SELECT * FROM users WHERE id = {user_id}")')
             config = ScanConfig(include_tests=True, include_docs=True)
             engine = ScanEngine(config)
             result = engine.scan(tmpdir)

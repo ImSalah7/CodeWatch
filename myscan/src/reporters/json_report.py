@@ -30,6 +30,12 @@ class JSONReporter:
                 "filesScanned": result.files_scanned,
                 "linesScanned": result.lines_scanned,
                 "skippedFiles": result.skipped_files,
+                "rulesExecuted": getattr(result, "rules_executed", 0),
+                "repository": getattr(result, "repository", ""),
+                "branch": getattr(result, "branch", ""),
+                "commit": getattr(result, "commit", ""),
+                "target": getattr(result, "target", ""),
+                "repositorySizeBytes": getattr(result, "repo_size_bytes", 0),
             },
             "summary": {
                 "riskScore": result.risk_score,
@@ -75,6 +81,13 @@ class JSONReporter:
 
             if f.location.code_snippet:
                 finding["codeSnippet"] = f.location.code_snippet
+            finding["occurrences"] = f.occurrences
+            if len(f.locations) > 1:
+                finding["locations"] = f.locations
+            if f.evidence:
+                finding["evidence"] = f.evidence
+            if f.state:
+                finding["state"] = f.state
             if f.cwe:
                 finding["cwe"] = {"id": f.cwe, "name": f.cwe_name}
             if f.owasp:

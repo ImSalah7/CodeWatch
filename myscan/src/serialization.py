@@ -108,6 +108,11 @@ def finding_from_dict(d: dict) -> Finding:
     )
     finding.reachability = d.get("reachability", "")
     finding.root_cause = d.get("root_cause", "")
+    finding.occurrences = max(1, int(d.get("occurrences", 1) or 1))
+    finding.locations = d.get("locations", []) or []
+    finding.evidence = d.get("evidence", []) or []
+    if d.get("state"):
+        finding.state = dict(d.get("state", {}))
     return finding
 
 
@@ -133,4 +138,15 @@ def result_from_dict(d: dict) -> ScanResult:
         scan_end=_parse_iso(d.get("scan_end")),
         languages_detected=summary.get("languages", {}),
     )
+    result.scan_id = d.get("scan_id", "")
+    result.repository = d.get("repository", "")
+    result.branch = d.get("branch", "")
+    result.commit = d.get("commit", "")
+    result.target = d.get("target", "")
+    result.rules_executed = d.get("rules_executed", 0)
+    result.repo_size_bytes = d.get("repo_size_bytes", 0)
+    result._enterprise_mode = bool(d.get("enterprise_mode", False))
+    result._secret_display_mode = d.get("secret_display_mode", "smart")
+    if d.get("llm_stats"):
+        result._llm_stats = d.get("llm_stats", {})
     return result

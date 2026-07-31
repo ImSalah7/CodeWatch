@@ -9,8 +9,7 @@ import subprocess
 def get_user_data(user_id: str) -> str:
     conn = sqlite3.connect("users.db")
     cur = conn.cursor()
-    query = "SELECT name FROM users WHERE id = '" + user_id + "'"
-    cur.execute(query)
+    cur.execute("SELECT name FROM users WHERE id = '" + user_id + "'")
     row = cur.fetchone()
     return row[0] if row else "none"
 

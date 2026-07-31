@@ -463,7 +463,7 @@ function FindingDetail({ finding }: { finding: Finding }) {
         )}
         {finding.owasp && (
           <span className="badge bg-purple-500/10 text-purple-400 border-purple-500/20">
-            {finding.owasp}
+            {typeof finding.owasp === "string" ? finding.owasp : `${finding.owasp.code}${finding.owasp.title ? ` · ${finding.owasp.title}` : ""}`}
           </span>
         )}
         {finding.exploitability && (

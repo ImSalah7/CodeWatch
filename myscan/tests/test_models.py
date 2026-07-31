@@ -121,3 +121,57 @@ class TestScanResult:
         r.findings = [f, f]
         r.deduplicate()
         assert len(r.findings) == 1
+
+    def test_group_duplicates(self):
+        def make(line):
+            return Finding(
+                rule_id="SEC001", title="SQL Injection", description="d",
+                severity=Severity.CRITICAL, confidence=0.9,
+                category=FindingCategory.SECURITY, language=Language.PYTHON,
+                location=CodeLocation(file_path="app.py", line=line,
+                                      code_snippet="cursor.execute(query)"),
+            )
+        r = ScanResult()
+        a, b, c = make(10), make(20), make(30)
+        c.severity = Severity.HIGH
+        r.findings = [a, b, c]
+        r.group_duplicates()
+        assert len(r.findings) == 1
+        g = r.findings[0]
+        assert g.occurrences == 3
+        assert len(g.locations) == 3
+        # Primary is max(confidence, severity.numeric, line): (0.9, 5, 20) beats (0.9, 4, 30)
+        assert g.location.line == 20
+        assert r.occurrences_total == 3
+
+    def test_group_duplicates_distinct_rules_stay_separate(self):
+        def make(rule, line):
+            return Finding(
+                rule_id=rule, title="T", description="d",
+                severity=Severity.HIGH, confidence=0.8,
+                category=FindingCategory.SECURITY, language=Language.PYTHON,
+                location=CodeLocation(file_path="app.py", line=line,
+                                      code_snippet="sink(x)"),
+            )
+        r = ScanResult()
+        r.findings = [make("SEC001", 1), make("SEC002", 2)]
+        r.group_duplicates()
+        assert len(r.findings) == 2
+        assert r.occurrences_total == 2
+
+    def test_finding_to_dict_roundtrip_new_fields(self):
+        f = Finding(
+            rule_id="SEC001", title="T", description="d",
+            severity=Severity.HIGH, confidence=0.8,
+            category=FindingCategory.SECURITY, language=Language.PYTHON,
+            location=CodeLocation(file_path="app.py", line=5),
+            evidence=[{"type": "regex_match", "detail": "matched"}],
+            occurrences=3,
+            locations=[{"file": "app.py", "line": 5}, {"file": "app.py", "line": 9}],
+            state={"suppressed": True},
+        )
+        d = f.to_dict()
+        assert d["occurrences"] == 3
+        assert d["evidence"] == [{"type": "regex_match", "detail": "matched"}]
+        assert d["state"] == {"suppressed": True}
+        assert len(d["locations"]) == 2

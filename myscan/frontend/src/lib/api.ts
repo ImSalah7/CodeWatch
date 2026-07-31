@@ -1,4 +1,10 @@
-import type { ScanJob, Stats, Finding } from "./types";
+import type {
+  ScanJob,
+  Stats,
+  Finding,
+  FindingsResponse,
+  FindingState,
+} from "./types";
 
 const BASE = "";
 
@@ -79,63 +85,58 @@ export async function getScanStatus(jobId: string): Promise<ScanJob> {
   return fetchJSON(`${BASE}/api/v1/scan/${jobId}`);
 }
 
-export async function getFindings(opts: {
+export interface FindingsQuery {
   job_id?: string;
   category?: string;
   severity?: string;
+  rule_id?: string;
+  cwe?: string;
+  owasp?: string;
+  language?: string;
+  file_ext?: string;
   min_confidence?: number;
+  min_cvss?: number;
   limit?: number;
   offset?: number;
   search?: string;
-} = {}): Promise<{ job_id: string; total: number; findings: Finding[] }> {
+  status?: string;
+  include_suppressed?: boolean;
+  sort?: string;
+  order?: "asc" | "desc";
+}
+
+export async function getFindings(opts: FindingsQuery = {}): Promise<FindingsResponse> {
   const params = new URLSearchParams();
-  if (opts.job_id) params.set("job_id", opts.job_id);
-  if (opts.category) params.set("category", opts.category);
-  if (opts.severity) params.set("severity", opts.severity);
-  if (opts.min_confidence) params.set("min_confidence", String(opts.min_confidence));
-  if (opts.limit) params.set("limit", String(opts.limit));
-  if (opts.offset) params.set("offset", String(opts.offset));
-  if (opts.search) params.set("search", opts.search);
+  const entries: Array<[keyof FindingsQuery, unknown]> = Object.entries(opts) as never;
+  for (const [key, value] of entries) {
+    if (value === undefined || value === null || value === "" || value === false) continue;
+    if (key === "include_suppressed") {
+      if (value === true) params.set(key, "1");
+      continue;
+    }
+    params.set(key, String(value));
+  }
   return fetchJSON(`${BASE}/api/v1/findings?${params}`);
 }
 
-export interface FindingDetail {
-  rule_id: string;
-  title: string;
-  description: string;
-  severity: string;
-  confidence: number;
-  category: string;
-  language?: string;
-  cwe?: string;
-  cwe_name?: string;
-  owasp?: { code: string; title: string };
-  cvss?: { score: number; vector: string; severity: string };
-  location: {
-    file_path: string;
-    line: number;
-    end_line?: number;
-    column?: number;
-    code_snippet?: string;
-    function?: string;
-    class?: string;
-  };
-  fix_suggestion?: string;
-  fixed_code?: string;
-  references?: string[];
-  exploit_scenario?: string;
-  impact?: string;
-  why_vulnerable?: string;
-  is_false_positive?: boolean;
-  confidence_reasoning?: string;
-  tags?: string[];
-  raw_secret?: string;
-  reachability?: string;
-  root_cause?: string;
-  fingerprint?: string;
+export async function bulkFindingAction(opts: {
+  scan_id: string;
+  action: "suppress" | "unsuppress" | "mark_false_positive" | "unmark_false_positive" | "assign" | "create_issue";
+  fingerprints: string[];
+  value?: string;
+}): Promise<{ updated: number; action: string; states: Record<string, FindingState> }> {
+  return fetchJSON(`${BASE}/api/v1/findings/bulk`, {
+    method: "POST",
+    body: JSON.stringify(opts),
+  });
+}
+
+export interface FindingDetail extends Finding {
   scan_id: string;
   scan_target: string;
   scan_date: string;
+  reachability?: string;
+  root_cause?: string;
 }
 
 export async function getFindingDetail(fingerprint: string): Promise<FindingDetail> {

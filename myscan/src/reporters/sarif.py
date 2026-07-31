@@ -7,6 +7,7 @@ from datetime import datetime, timezone
 from typing import Any
 
 from ..core.models import ScanResult
+from ..__init__ import __version__
 
 
 class SARIFReporter:
@@ -20,7 +21,7 @@ class SARIFReporter:
                 "tool": {
                     "driver": {
                         "name": "MyScan",
-                        "version": "3.0.0",
+                        "version": __version__,
                         "informationUri": "https://github.com/myscan/myscan",
                         "rules": self._extract_rules(result),
                         "properties": {
@@ -31,6 +32,12 @@ class SARIFReporter:
                             "scanDuration": result.scan_duration,
                             "riskScore": result.risk_score,
                             "grade": result.grade,
+                            "repository": getattr(result, 'repository', '') or '',
+                            "branch": getattr(result, 'branch', '') or '',
+                            "commit": getattr(result, 'commit', '') or '',
+                            "target": getattr(result, 'target', '') or '',
+                            "rulesExecuted": getattr(result, 'rules_executed', 0),
+                            "occurrencesTotal": getattr(result, 'occurrences_total', len(result.findings)),
                         },
                     }
                 },
@@ -43,6 +50,11 @@ class SARIFReporter:
                     "properties": {
                         "scanDuration": result.scan_duration,
                         "filesScanned": result.files_scanned,
+                        "linesScanned": result.lines_scanned,
+                        "rulesExecuted": getattr(result, 'rules_executed', 0),
+                        "repository": getattr(result, 'repository', '') or '',
+                        "branch": getattr(result, 'branch', '') or '',
+                        "commit": getattr(result, 'commit', '') or '',
                     },
                 }],
             }],
@@ -127,6 +139,31 @@ class SARIFReporter:
                 r["properties"]["confidenceReasoning"] = f.confidence_reasoning
             if f.references:
                 r["properties"]["references"] = f.references[:5]
+            if f.occurrences > 1:
+                r["properties"]["occurrences"] = f.occurrences
+            if f.locations and len(f.locations) > 1:
+                r["properties"]["additionalLocations"] = [
+                    {
+                        "uri": loc.get("file_path", ""),
+                        "line": loc.get("line"),
+                        "endLine": loc.get("end_line"),
+                    }
+                    for loc in f.locations[1:]
+                ]
+            if f.evidence:
+                r["properties"]["evidence"] = [
+                    {
+                        "type": e.get("type", ""),
+                        "detail": e.get("detail", ""),
+                        "matched": e.get("matched", ""),
+                        "line": e.get("line"),
+                    }
+                    for e in f.evidence
+                ]
+            if getattr(f, "state", None):
+                r["properties"]["state"] = {
+                    k: v for k, v in f.state.items() if v is not None
+                }
 
             results.append(r)
         return results

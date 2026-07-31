@@ -56,7 +56,14 @@ def _build_rules() -> list[Rule]:
       "Use parameterized queries or an ORM instead of string formatting.",
       ["https://cwe.mitre.org/data/definitions/89.html", "https://owasp.org/Top10/A03_2021-Injection/"],
       "An attacker could execute arbitrary SQL commands, read/modify/delete all data, or escalate privileges.",
-      pattern=r'execute\s*\(\s*(f["\']|["\'].*\%|["\'].*\{)|f["\'].*(?:SELECT|INSERT|UPDATE|DELETE).*\{|["\'].*(?:SELECT|INSERT|UPDATE|DELETE).*\+\s*',
+      pattern=(r'(?:execute|executemany|executescript)\s*\(\s*f"(?=[^"]*(?:SELECT|INSERT|UPDATE|DELETE|DROP|UNION|ALTER|CREATE|EXEC|MERGE))[^"]*\{'
+               r"|(?:execute|executemany|executescript)\s*\(\s*f'(?=[^']*(?:SELECT|INSERT|UPDATE|DELETE|DROP|UNION|ALTER|CREATE|EXEC|MERGE))[^']*\{"
+               r'|(?:execute|executemany|executescript)\s*\(\s*"(?:[^"]*(?:SELECT|INSERT|UPDATE|DELETE|DROP|UNION|ALTER|CREATE|EXEC|MERGE)[^"]*)"\s*\+'
+               r"|(?:execute|executemany|executescript)\s*\(\s*'(?:[^']*(?:SELECT|INSERT|UPDATE|DELETE|DROP|UNION|ALTER|CREATE|EXEC|MERGE)[^']*)'\s*\+"
+               r'|(?:execute|executemany|executescript)\s*\(\s*"(?:[^"]*(?:SELECT|INSERT|UPDATE|DELETE|DROP|UNION|ALTER|CREATE|EXEC|MERGE)[^"]*)"\s*\.\s*format\s*\('
+               r"|(?:execute|executemany|executescript)\s*\(\s*'(?:[^']*(?:SELECT|INSERT|UPDATE|DELETE|DROP|UNION|ALTER|CREATE|EXEC|MERGE)[^']*)'\s*\.\s*format\s*\("
+               r'|(?:execute|executemany|executescript)\s*\(\s*"(?:[^"]*(?:SELECT|INSERT|UPDATE|DELETE|DROP|UNION|ALTER|CREATE|EXEC|MERGE)[^"]*)"\s*%\s*[a-zA-Z(]'
+               r"|(?:execute|executemany|executescript)\s*\(\s*'(?:[^']*(?:SELECT|INSERT|UPDATE|DELETE|DROP|UNION|ALTER|CREATE|EXEC|MERGE)[^']*)'\s*%\s*[a-zA-Z(]"),
       cvss={"attack_vector": "N", "attack_complexity": "L", "privileges": "N", "user_interaction": "N", "scope": "C", "confidentiality": "H", "integrity": "H", "availability": "H"})
 
     r("SEC002", "OS Command Injection",

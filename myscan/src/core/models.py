@@ -191,11 +191,22 @@ class Finding:
     tags: list[str] = field(default_factory=list)
     fingerprint: str = ""
     raw_secret: str = ""
+    evidence: list[dict] = field(default_factory=list)
+    occurrences: int = 1
+    locations: list[dict] = field(default_factory=list)
+    state: dict = field(default_factory=dict)
 
     def __post_init__(self):
         if not self.fingerprint:
             raw = f"{self.rule_id}:{self.location.file_path}:{self.location.line}:{self.title}"
             self.fingerprint = hashlib.sha256(raw.encode()).hexdigest()[:16]
+        if not self.locations:
+            self.locations = [{
+                "file": self.location.file_path,
+                "line": self.location.line,
+                "end_line": self.location.end_line,
+                "column": self.location.column,
+            }]
 
     def to_dict(self) -> dict[str, Any]:
         return {
@@ -237,6 +248,10 @@ class Finding:
             "tags": self.tags,
             "fingerprint": self.fingerprint,
             "raw_secret": self.raw_secret,
+            "evidence": self.evidence,
+            "occurrences": self.occurrences,
+            "locations": self.locations,
+            "state": self.state,
             "reachability": getattr(self, "reachability", ""),
             "root_cause": getattr(self, "root_cause", ""),
         }
@@ -302,6 +317,47 @@ class ScanResult:
                 unique.append(f)
         self.findings = unique
 
+    def group_duplicates(self):
+        """Group identical issues (same rule, title, normalized code) into one
+        finding with an occurrence count and the full list of locations."""
+        import re as _re
+
+        def _normalize(code: str) -> str:
+            return _re.sub(r"\s+", " ", (code or "").strip())
+
+        groups: dict[str, list[Finding]] = {}
+        for f in self.findings:
+            key = "|".join([f.rule_id, f.title, _normalize(f.location.code_snippet)])
+            groups.setdefault(key, []).append(f)
+
+        grouped: list[Finding] = []
+        for members in groups.values():
+            if len(members) == 1:
+                grouped.append(members[0])
+                continue
+            primary = max(members, key=lambda f: (f.confidence, f.severity.numeric, f.location.line))
+            locations: list[dict] = []
+            seen_loc: set[tuple] = set()
+            for f in members:
+                loc = (f.location.file_path, f.location.line)
+                if loc in seen_loc:
+                    continue
+                seen_loc.add(loc)
+                locations.append({
+                    "file": f.location.file_path,
+                    "line": f.location.line,
+                    "end_line": f.location.end_line,
+                    "column": f.location.column,
+                })
+            primary.occurrences = sum(m.occurrences for m in members)
+            primary.locations = locations
+            grouped.append(primary)
+        self.findings = grouped
+
+    @property
+    def occurrences_total(self) -> int:
+        return sum(f.occurrences for f in self.findings)
+
     def remove_false_positives(self):
         self.findings = [f for f in self.findings if not f.is_false_positive]
 
@@ -349,11 +405,22 @@ class ScanResult:
         return {
             "tool": "MyScan",
             "version": __version__,
+            "scan_id": getattr(self, "scan_id", ""),
+            "repository": getattr(self, "repository", ""),
+            "branch": getattr(self, "branch", ""),
+            "commit": getattr(self, "commit", ""),
+            "target": getattr(self, "target", ""),
+            "rules_executed": getattr(self, "rules_executed", 0),
+            "repo_size_bytes": getattr(self, "repo_size_bytes", 0),
+            "enterprise_mode": getattr(self, "_enterprise_mode", False),
+            "secret_display_mode": getattr(self, "_secret_display_mode", "smart"),
+            "llm_stats": getattr(self, "_llm_stats", {}),
             "scan_start": self.scan_start.isoformat(),
             "scan_end": self.scan_end.isoformat() if self.scan_end else None,
             "scan_duration": round(self.scan_duration, 2),
             "summary": {
                 "total_findings": len(self.findings),
+                "occurrences_total": self.occurrences_total,
                 "security_findings": len(self.security_findings),
                 "quality_findings": len(self.quality_findings),
                 "secret_findings": len(self.secret_findings),

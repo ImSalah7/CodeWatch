@@ -240,6 +240,159 @@ _scan_history: dict[str, ScanJob] = {}
 _history_lock = threading.Lock()
 
 
+def _git_metadata(path: str) -> dict:
+    def run(*args: str) -> str:
+        try:
+            out = subprocess.run(
+                ["git", "-C", str(path), *args],
+                capture_output=True, text=True, timeout=10,
+            )
+            return out.stdout.strip() if out.returncode == 0 else ""
+        except Exception:
+            return ""
+    return {
+        "branch": run("rev-parse", "--abbrev-ref", "HEAD"),
+        "commit": run("rev-parse", "HEAD"),
+        "remote": run("remote", "get-url", "origin"),
+    }
+
+
+def _dir_size(path: str, max_files: int = 200_000) -> int:
+    total = 0
+    count = 0
+    skip = {".git", "node_modules", "__pycache__", ".next"}
+    for root, dirs, files in os.walk(path):
+        dirs[:] = [d for d in dirs if d not in skip]
+        for name in files:
+            try:
+                total += os.path.getsize(os.path.join(root, name))
+            except OSError:
+                pass
+            count += 1
+            if count > max_files:
+                return total
+    return total
+
+
+def _attach_repo_metadata(result, target_path: str, is_remote: bool, clone_dir: str = "") -> None:
+    """Best-effort repository metadata (name, branch, commit, size) for the header."""
+    scan_path = clone_dir if (is_remote and clone_dir) else target_path
+    git = _git_metadata(scan_path) if scan_path else {}
+    repo_name = ""
+    remote = (git.get("remote") or "").rstrip("/")
+    if remote:
+        repo_name = os.path.basename(remote).removesuffix(".git")
+    if not repo_name and scan_path:
+        repo_name = os.path.basename(os.path.normpath(str(scan_path)))
+    result.repository = repo_name or ""
+    result.branch = git.get("branch", "")
+    result.commit = git.get("commit", "")
+    result.repo_size_bytes = (
+        _dir_size(scan_path) if scan_path and os.path.isdir(scan_path) else 0
+    )
+
+
+def _finding_dict_matches(f: dict, **filters) -> bool:
+    """Apply the same filters used by store.get_findings to an in-memory finding."""
+    if filters.get("category") and f.get("category", "").lower() != filters["category"].lower():
+        return False
+    if filters.get("severity") and f.get("severity", "").lower() != filters["severity"].lower():
+        return False
+    if filters.get("rule_id") and f.get("rule_id", "").lower() != filters["rule_id"].lower():
+        return False
+    if filters.get("cwe") and (f.get("cwe") or "").lower() != filters["cwe"].lower():
+        return False
+    owasp = (f.get("owasp") or {}).get("code", "")
+    if filters.get("owasp") and owasp.lower() != filters["owasp"].lower():
+        return False
+    if filters.get("min_cvss", 0) > 0 and (f.get("cvss_score") or 0) < filters["min_cvss"]:
+        return False
+    if filters.get("language") and f.get("language", "").lower() != filters["language"].lower():
+        return False
+    if filters.get("file_ext") and filters["file_ext"].lower() not in f.get("file", "").lower():
+        return False
+    if filters.get("min_confidence", 0) > 0 and (f.get("confidence") or 0) < filters["min_confidence"]:
+        return False
+    if filters.get("status") == "false_positive" and not f.get("state", {}).get("is_false_positive"):
+        return False
+    if filters.get("status") == "real" and f.get("state", {}).get("is_false_positive"):
+        return False
+    if not filters.get("include_suppressed") and f.get("state", {}).get("suppressed"):
+        return False
+    q = (filters.get("search") or "").lower()
+    if q:
+        haystack = " ".join([
+            f.get("title", ""), f.get("rule_id", ""), f.get("file", ""),
+            f.get("cwe", ""), f.get("description", ""),
+        ]).lower()
+        if q not in haystack:
+            return False
+    return True
+
+
+_SORT_FUNCS = {
+    "severity": lambda f: {"critical": 0, "high": 1, "medium": 2, "low": 3, "info": 4}.get(f.get("severity"), 5),
+    "cvss": lambda f: f.get("cvss_score") or 0,
+    "confidence": lambda f: f.get("confidence") or 0,
+    "file": lambda f: f.get("file", ""),
+    "rule": lambda f: f.get("rule_id", ""),
+    "line": lambda f: f.get("line") or 0,
+}
+
+
+def _scan_metadata_dict(job, source: str, job_id: str) -> dict:
+    """Build the report-header metadata block for a live or stored scan."""
+    if source == "live":
+        result = job.result
+        summary = result.to_dict().get("summary", {}) if result else {}
+        return {
+            "scan_id": job_id,
+            "repository": getattr(result, "repository", "") if result else "",
+            "branch": getattr(result, "branch", "") if result else "",
+            "commit": getattr(result, "commit", "") if result else "",
+            "target": job.target,
+            "scan_time": job.started_at,
+            "completed_at": job.completed_at,
+            "scan_duration": round(result.scan_duration, 2) if result else 0.0,
+            "scanner_version": __version__,
+            "scanner_tool": "MyScan",
+            "enterprise": job.enterprise,
+            "files_scanned": summary.get("files_scanned", 0),
+            "lines_scanned": summary.get("lines_scanned", 0),
+            "rules_executed": getattr(result, "rules_executed", 0) if result else 0,
+            "repo_size_bytes": getattr(result, "repo_size_bytes", 0) if result else 0,
+            "languages": summary.get("languages", {}),
+            "occurrences_total": summary.get("occurrences_total", 0),
+            "findings_total": summary.get("total_findings", 0),
+            "risk_score": summary.get("risk_score", 0),
+            "grade": summary.get("grade", "A+"),
+        }
+    result = job.get("result") or {}
+    summary = result.get("summary", {}) or {}
+    return {
+        "scan_id": job_id,
+        "repository": result.get("repository", ""),
+        "branch": result.get("branch", ""),
+        "commit": result.get("commit", ""),
+        "target": job.get("target", ""),
+        "scan_time": job.get("started_at", ""),
+        "completed_at": job.get("completed_at", ""),
+        "scan_duration": round(job.get("scan_duration") or 0.0, 2),
+        "scanner_version": result.get("version", __version__),
+        "scanner_tool": "MyScan",
+        "enterprise": bool(job.get("enterprise")),
+        "files_scanned": summary.get("files_scanned", 0),
+        "lines_scanned": summary.get("lines_scanned", 0),
+        "rules_executed": result.get("rules_executed", 0),
+        "repo_size_bytes": result.get("repo_size_bytes", 0),
+        "languages": summary.get("languages", {}),
+        "occurrences_total": summary.get("occurrences_total", 0),
+        "findings_total": summary.get("total_findings", 0),
+        "risk_score": summary.get("risk_score", 0),
+        "grade": summary.get("grade", "A+"),
+    }
+
+
 def _run_scan_job(job: ScanJob, config: ScanConfig) -> None:
     tracker = create_tracker(job.job_id)
     try:
@@ -254,6 +407,8 @@ def _run_scan_job(job: ScanJob, config: ScanConfig) -> None:
 
         engine = ScanEngine(config, enterprise_mode=job.enterprise, progress_tracker=tracker)
         result = engine.scan(scan_target)
+        result.scan_id = job.job_id
+        _attach_repo_metadata(result, scan_target, job.is_remote, job.clone_dir)
 
         from .core.secret_display import SecretDisplayConfig, apply_secret_display_mode
         display_config = SecretDisplayConfig.from_string(job.secret_display)
@@ -557,42 +712,66 @@ def get_findings():
 
     category = request.args.get("category", "")
     severity = request.args.get("severity", "")
+    rule_id = request.args.get("rule_id", "")
+    cwe = request.args.get("cwe", "")
+    owasp = request.args.get("owasp", "")
+    language = request.args.get("language", "")
+    file_ext = request.args.get("file_ext", "")
+    status = request.args.get("status", "").strip().lower()
+    include_suppressed = request.args.get("include_suppressed", "").strip().lower() in ("1", "true", "yes")
+    sort = request.args.get("sort", "").strip().lower()
+    order = request.args.get("order", "asc").strip().lower()
+    if order not in ("asc", "desc"):
+        order = "asc"
+    if sort not in _SORT_FUNCS:
+        sort = ""
+    min_cvss = _clamp_float(request.args.get("min_cvss", 0), 0.0, 0.0, 10.0)
     min_confidence = _clamp_float(request.args.get("min_confidence", 0), 0.0, 0.0, 1.0)
     limit = _clamp_int(request.args.get("limit", 100), 100, 1, 500)
     offset = max(0, _clamp_int(request.args.get("offset", 0), 0, 0, 10_000_000))
     search = request.args.get("search", "").lower()
 
+    filters = {
+        "category": category, "severity": severity, "rule_id": rule_id,
+        "cwe": cwe, "owasp": owasp, "language": language, "file_ext": file_ext,
+        "status": status, "include_suppressed": include_suppressed,
+        "min_cvss": min_cvss, "min_confidence": min_confidence, "search": search,
+    }
+
     if source == "live":
-        findings = job.result.findings
-        if category:
-            findings = [f for f in findings if f.category.value == category.lower()]
-        if severity:
-            findings = [f for f in findings if f.severity.value == severity.lower()]
-        if min_confidence > 0:
-            findings = [f for f in findings if f.confidence >= min_confidence]
-        if search:
-            findings = [
-                f for f in findings
-                if search in f.title.lower()
-                or search in f.rule_id.lower()
-                or search in f.location.file_path.lower()
-                or search in (f.cwe or "").lower()
-            ]
+        states = store.get_scan_states(job_id)
+        findings = []
+        for f in job.result.findings:
+            d = f.to_dict()
+            d["state"] = states.get(f.fingerprint, d.get("state", {}))
+            if _finding_dict_matches(d, **filters):
+                findings.append(d)
+        if sort:
+            findings.sort(
+                key=_SORT_FUNCS[sort],
+                reverse=(order == "desc"),
+            )
+        else:
+            findings.sort(key=lambda d: {"critical": 0, "high": 1, "medium": 2, "low": 3, "info": 4}.get(d.get("severity"), 5))
         total = len(findings)
         findings = findings[offset:offset + limit]
         return jsonify({
             "job_id": job_id, "total": total, "offset": offset,
-            "limit": limit,
-            "findings": [f.to_dict() for f in findings],
+            "limit": limit, "findings": findings,
+            "metadata": _scan_metadata_dict(job, source, job_id),
         })
 
     total, findings = store.get_findings(
-        scan_id=job_id, category=category, severity=severity,
-        min_confidence=min_confidence, search=search, limit=limit, offset=offset,
+        scan_id=job_id, category=category, severity=severity, rule_id=rule_id,
+        cwe=cwe, owasp=owasp, language=language, file_ext=file_ext,
+        min_cvss=min_cvss, min_confidence=min_confidence, search=search,
+        include_suppressed=include_suppressed, status=status,
+        sort=sort, order=order, limit=limit, offset=offset,
     )
     return jsonify({
         "job_id": job_id, "total": total, "offset": offset,
         "limit": limit, "findings": findings,
+        "metadata": _scan_metadata_dict(job, source, job_id),
     })
 
 
@@ -607,6 +786,7 @@ def get_finding(fingerprint: str):
             for f in job.result.findings:
                 if f.fingerprint == fingerprint:
                     d = f.to_dict()
+                    d["state"] = store.get_scan_states(job_id).get(fingerprint, d.get("state", {}))
                     d["scan_id"] = job_id
                     d["scan_target"] = job.target
                     d["scan_date"] = job.completed_at
@@ -615,6 +795,54 @@ def get_finding(fingerprint: str):
     if d:
         return jsonify(d)
     return jsonify({"error": "Finding not found"}), 404
+
+
+@app.route("/api/v1/findings/bulk", methods=["POST"])
+@sec.require_auth
+def bulk_finding_action():
+    """Apply a triage action to many findings at once.
+
+    Body: {"scan_id": str, "action": str, "fingerprints": [str], "value": str?}
+    Actions: suppress | unsuppress | mark_false_positive | unmark_false_positive
+             | assign | create_issue
+    """
+    body = request.get_json(silent=True) or {}
+    scan_id = (body.get("scan_id") or "").strip()
+    action = (body.get("action") or "").strip().lower()
+    fingerprints = [str(f) for f in (body.get("fingerprints") or []) if str(f).strip()]
+    value = (body.get("value") or "").strip()
+
+    if not scan_id:
+        return jsonify({"error": "Missing required field: scan_id"}), 400
+    if not action:
+        return jsonify({"error": "Missing required field: action"}), 400
+    if not fingerprints:
+        return jsonify({"error": "Missing required field: fingerprints"}), 400
+
+    action_map = {
+        "suppress": {"suppressed": True},
+        "unsuppress": {"suppressed": False},
+        "mark_false_positive": {"is_false_positive": True},
+        "unmark_false_positive": {"is_false_positive": False},
+    }
+    if action in action_map:
+        fields = action_map[action]
+    elif action == "assign":
+        if not value:
+            return jsonify({"error": "action 'assign' requires a value (assignee)"}), 400
+        fields = {"assignee": value}
+    elif action == "create_issue":
+        if not value:
+            return jsonify({"error": "action 'create_issue' requires a value (issue URL)"}), 400
+        fields = {"issue_url": value}
+    else:
+        return jsonify({"error": f"Unknown action: {action}"}), 400
+
+    states = {}
+    for fp in fingerprints:
+        state = store.set_finding_state(scan_id, fp, **fields)
+        states[fp] = state
+    return jsonify({"updated": len(fingerprints), "action": action, "states": states})
 
 
 @app.route("/api/v1/search", methods=["GET"])
