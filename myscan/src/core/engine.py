@@ -304,7 +304,13 @@ class ScanEngine:
     def _collect_files(self, root: Path) -> list[Path]:
         files: list[Path] = []
         skip_dirs = self.config.skip_dirs
-        for dirpath, dirnames, filenames in os.walk(str(root)):
+
+        def _on_error(_err: OSError) -> None:
+            # Skip directories that cannot be traversed (e.g. paths longer
+            # than MAX_PATH on Windows) instead of aborting the scan.
+            return
+
+        for dirpath, dirnames, filenames in os.walk(str(root), onerror=_on_error):
             dirnames[:] = [d for d in dirnames if d not in skip_dirs]
             for filename in filenames:
                 fp = Path(dirpath) / filename

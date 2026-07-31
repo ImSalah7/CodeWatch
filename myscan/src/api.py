@@ -191,8 +191,14 @@ def _clean_target(target: str) -> str:
 # --------------------------------------------------------------------------
 
 def _clone_repo(url: str, dest: str) -> str:
-    cmd = ["git", "clone", "--depth", "1", "--single-branch", "--no-tags", url, dest]
-    proc = subprocess.run(cmd, capture_output=True, text=True, timeout=300)
+    cmd = [
+        "git", "clone", "--depth", "1", "--single-branch", "--no-tags",
+        # Windows: allow paths longer than MAX_PATH (260 chars) when the
+        # repository has deeply nested files (e.g. Superalgos).
+        "-c", "core.longpaths=true",
+        url, dest,
+    ]
+    proc = subprocess.run(cmd, capture_output=True, text=True, timeout=600)
     if proc.returncode != 0:
         raise RuntimeError(
             f"git clone failed (exit {proc.returncode}): {proc.stderr.strip() or proc.stdout.strip()}"

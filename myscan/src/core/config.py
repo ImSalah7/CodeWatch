@@ -10,6 +10,9 @@ SKIP_DIRS = {
     ".idea", ".vscode", "myscan_reports", "myscan.egg-info", ".cache",
     "vendor", "coverage", "htmlcov", ".nyc_output", "target",
     "__snapshots__", ".gradle", ".maven",
+    ".next", ".nuxt", ".svelte-kit", ".output",
+    ".turbo", ".parcel-cache", ".webpack", ".vite", ".expo",
+    ".dart_tool", ".angular", ".terraform", ".serverless",
 }
 
 SKIP_FILES = {
