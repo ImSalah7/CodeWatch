@@ -48,6 +48,7 @@ from flask import Flask, Response, jsonify, request, stream_with_context
 
 from . import security as sec
 from . import store
+from . import users as userlib
 from .__init__ import __version__
 from .core.config import ScanConfig
 from .core.engine import ScanEngine
@@ -508,7 +509,7 @@ def health_check():
 
 
 @app.route("/api/v1/scan", methods=["POST"])
-@sec.require_auth
+@sec.require_role("operator")
 def start_scan():
     body = request.get_json(silent=True) or {}
     try:
@@ -660,7 +661,7 @@ def stream_scan_events(job_id: str):
 
 
 @app.route("/api/v1/scan/<job_id>/cancel", methods=["POST"])
-@sec.require_auth
+@sec.require_role("operator")
 def cancel_scan(job_id: str):
     tracker = get_tracker(job_id)
     if not tracker:
@@ -671,7 +672,7 @@ def cancel_scan(job_id: str):
 
 
 @app.route("/api/v1/scan/<job_id>/pause", methods=["POST"])
-@sec.require_auth
+@sec.require_role("operator")
 def pause_scan(job_id: str):
     tracker = get_tracker(job_id)
     if not tracker:
@@ -681,7 +682,7 @@ def pause_scan(job_id: str):
 
 
 @app.route("/api/v1/scan/<job_id>/resume", methods=["POST"])
-@sec.require_auth
+@sec.require_role("operator")
 def resume_scan(job_id: str):
     tracker = get_tracker(job_id)
     if not tracker:
@@ -803,7 +804,7 @@ def get_finding(fingerprint: str):
 
 
 @app.route("/api/v1/findings/bulk", methods=["POST"])
-@sec.require_auth
+@sec.require_role("operator")
 def bulk_finding_action():
     """Apply a triage action to many findings at once.
 
@@ -827,8 +828,9 @@ def bulk_finding_action():
     action_map = {
         "suppress": {"suppressed": True},
         "unsuppress": {"suppressed": False},
-        "mark_false_positive": {"is_false_positive": True},
+        "mark_false_positive": {"is_false_positive": True, "verified": True},
         "unmark_false_positive": {"is_false_positive": False},
+        "mark_real": {"is_false_positive": False, "verified": True},
     }
     if action in action_map:
         fields = action_map[action]
@@ -906,7 +908,7 @@ def get_report(job_id: str):
 
 
 @app.route("/api/v1/fix", methods=["POST"])
-@sec.require_auth
+@sec.require_role("operator")
 def generate_fixes():
     body = request.get_json(silent=True) or {}
     job_id = body.get("job_id", "")
@@ -983,7 +985,7 @@ def get_settings():
 
 
 @app.route("/api/v1/settings", methods=["PUT"])
-@sec.require_auth
+@sec.require_role("admin")
 def update_settings():
     body = request.get_json(silent=True) or {}
     settings = body.get("settings", body)
@@ -994,7 +996,7 @@ def update_settings():
 
 
 @app.route("/api/v1/dependencies", methods=["POST"])
-@sec.require_auth
+@sec.require_role("operator")
 def scan_dependencies():
     """Scan a repository for vulnerable dependencies."""
     body = request.get_json(silent=True) or {}
@@ -1035,7 +1037,7 @@ def scan_dependencies():
 
 
 @app.route("/api/v1/sbom", methods=["POST"])
-@sec.require_auth
+@sec.require_role("operator")
 def generate_sbom():
     """Generate a CycloneDX or SPDX SBOM for a target repository."""
     body = request.get_json(silent=True) or {}
@@ -1068,6 +1070,158 @@ def generate_sbom():
         return jsonify(json.loads(doc.to_cyclonedx_json()))
     except Exception as exc:
         return jsonify({"error": f"SBOM generation failed: {exc}"}), 500
+
+
+# --------------------------------------------------------------------------
+# Authentication (login / session / whoami)
+# --------------------------------------------------------------------------
+
+@app.route("/api/v1/auth/login", methods=["POST"])
+def login():
+    """Exchange username+password for a signed session token."""
+    allowed, retry_after = sec.check_login_rate_limit()
+    if not allowed:
+        return (
+            jsonify({"error": "Too many login attempts. Please retry later."}),
+            429,
+            {"Retry-After": str(retry_after)},
+        )
+    body = request.get_json(silent=True) or {}
+    username = (body.get("username") or "").strip()
+    password = body.get("password") or ""
+    if not username or not password:
+        return jsonify({"error": "Missing required field: username or password"}), 400
+
+    user = store.get_user(username)
+    if not user or not user["active"] or not userlib.verify_password(password, user["password_hash"]):
+        return jsonify({"error": "Invalid username or password"}), 401
+
+    token = userlib.issue_session_token(user["username"], user["role"])
+    return jsonify({
+        "token": token,
+        "expires_in": userlib.SESSION_TTL_SECONDS,
+        "user": store.user_public_dict(user),
+    })
+
+
+@app.route("/api/v1/auth/logout", methods=["POST"])
+@sec.require_auth
+def logout():
+    """Stateless logout: the client discards the session token."""
+    return jsonify({"status": "logged_out"})
+
+
+@app.route("/api/v1/auth/me", methods=["GET"])
+@sec.require_auth
+def auth_me():
+    ctx = sec.current_auth()
+    if ctx["via"] == "master":
+        return jsonify({"username": "admin", "role": "admin", "via": "master"})
+    return jsonify({
+        "username": ctx["username"],
+        "role": ctx["role"],
+        "via": ctx["via"],
+    })
+
+
+# --------------------------------------------------------------------------
+# User + API key management (admin)
+# --------------------------------------------------------------------------
+
+@app.route("/api/v1/users", methods=["GET"])
+@sec.require_role("admin")
+def list_users():
+    users = [store.user_public_dict(u) for u in store.list_users()]
+    return jsonify({"users": users})
+
+
+@app.route("/api/v1/users", methods=["POST"])
+@sec.require_role("admin")
+def create_user():
+    body = request.get_json(silent=True) or {}
+    username = (body.get("username") or "").strip()
+    password = body.get("password") or ""
+    role = (body.get("role") or "viewer").strip().lower()
+
+    if not username or not password:
+        return jsonify({"error": "Missing required field: username or password"}), 400
+    if len(password) < 8:
+        return jsonify({"error": "Password must be at least 8 characters"}), 400
+    if not userlib.valid_role(role):
+        return jsonify({"error": f"Invalid role. Must be one of: {', '.join(userlib.ROLES)}"}), 400
+    if store.get_user(username):
+        return jsonify({"error": f"User already exists: {username}"}), 409
+
+    store.create_user(username, userlib.hash_password(password), role)
+    user = store.get_user(username)
+    return jsonify({"user": store.user_public_dict(user)}), 201
+
+
+@app.route("/api/v1/users/<username>", methods=["PUT"])
+@sec.require_role("admin")
+def update_user(username):
+    body = request.get_json(silent=True) or {}
+    updates: dict = {}
+
+    if "password" in body and body["password"]:
+        if len(str(body["password"])) < 8:
+            return jsonify({"error": "Password must be at least 8 characters"}), 400
+        updates["password_hash"] = userlib.hash_password(str(body["password"]))
+    if "role" in body:
+        role = str(body["role"]).strip().lower()
+        if not userlib.valid_role(role):
+            return jsonify({"error": f"Invalid role. Must be one of: {', '.join(userlib.ROLES)}"}), 400
+        updates["role"] = role
+    if "active" in body:
+        updates["active"] = 1 if body["active"] else 0
+
+    if not updates:
+        return jsonify({"error": "Nothing to update"}), 400
+    user = store.update_user(username, **updates)
+    if not user:
+        return jsonify({"error": f"User not found: {username}"}), 404
+    return jsonify({"user": store.user_public_dict(user)})
+
+
+@app.route("/api/v1/users/<username>", methods=["DELETE"])
+@sec.require_role("admin")
+def delete_user(username):
+    if not store.delete_user(username):
+        return jsonify({"error": f"User not found: {username}"}), 404
+    return jsonify({"status": "deleted"})
+
+
+@app.route("/api/v1/users/<username>/keys", methods=["GET"])
+@sec.require_role("admin")
+def list_user_keys(username):
+    if not store.get_user(username):
+        return jsonify({"error": f"User not found: {username}"}), 404
+    return jsonify({"keys": store.list_api_keys(username)})
+
+
+@app.route("/api/v1/users/<username>/keys", methods=["POST"])
+@sec.require_role("admin")
+def create_user_key(username):
+    if not store.get_user(username):
+        return jsonify({"error": f"User not found: {username}"}), 404
+    body = request.get_json(silent=True) or {}
+    label = (body.get("label") or "").strip()
+    raw = userlib.generate_api_key()
+    key_id = store.add_api_key(username, userlib.hash_api_key(raw), label)
+    return jsonify({
+        "id": key_id,
+        "username": username,
+        "label": label,
+        "key": raw,  # shown exactly once; only a hash is stored
+    }), 201
+
+
+@app.route("/api/v1/users/<username>/keys/<int:key_id>", methods=["DELETE"])
+@sec.require_role("admin")
+def delete_user_key(username, key_id):
+    if not store.delete_api_key(username, key_id):
+        return jsonify({"error": "Key not found"}), 404
+    return jsonify({"status": "deleted"})
 
 
 def create_app(config: dict | None = None) -> Flask:

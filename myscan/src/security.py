@@ -1,7 +1,10 @@
 """Production security layer for the MyScan REST API.
 
 Provides:
-    - API key authentication (Bearer token, Basic auth, X-API-Key header, or ?token=)
+    - Authentication: legacy master API key (``MYSCAN_API_KEY``), per-user
+      API keys, and signed session tokens — resolved to a role (admin /
+      operator / viewer) via ``current_auth()``
+    - Role enforcement through ``require_role``
     - Per-client rate limiting (sliding window)
     - CORS allowlist with preflight handling
     - SSRF guard for remote scan targets (blocks private/loopback/link-local hosts)
@@ -24,7 +27,10 @@ from collections import defaultdict, deque
 from functools import wraps
 from urllib.parse import urlparse
 
-from flask import jsonify, request
+from flask import g, jsonify, request
+
+from . import store
+from . import users as userlib
 
 # --------------------------------------------------------------------------
 # Configuration (all from environment, with safe defaults)
@@ -33,6 +39,7 @@ from flask import jsonify, request
 API_KEY = os.environ.get("MYSCAN_API_KEY", "").strip()
 RATE_LIMIT_PER_MINUTE = int(os.environ.get("MYSCAN_RATE_LIMIT", "300"))
 RATE_LIMIT_BURST = int(os.environ.get("MYSCAN_RATE_LIMIT_BURST", "60"))
+RATE_LIMIT_LOGIN_PER_MINUTE = int(os.environ.get("MYSCAN_LOGIN_RATE_LIMIT", "10"))
 CORS_ORIGINS = [
     o.strip() for o in os.environ.get("MYSCAN_CORS_ORIGINS", "").split(",") if o.strip()
 ]
@@ -46,8 +53,22 @@ ALLOWED_URL_SCHEMES = ("http", "https", "git", "ssh")
 
 
 def auth_enabled() -> bool:
-    """True when an API key is configured and must be enforced."""
-    return bool(API_KEY)
+    """True when authentication must be enforced.
+
+    Enforced when a master API key is configured or when any user account
+    exists. A fresh local deployment with no key and no users stays open.
+    """
+    if API_KEY:
+        return True
+    try:
+        return len(store.list_users()) > 0
+    except Exception:
+        return False
+
+
+def default_role() -> str:
+    """Role granted to unauthenticated requests on an open (dev) instance."""
+    return "admin"
 
 
 # --------------------------------------------------------------------------
@@ -75,28 +96,98 @@ def _extract_token() -> str:
     return ""
 
 
-def _token_valid(token: str) -> bool:
+def _resolve_auth(token: str) -> dict | None:
+    """Resolve a token to an auth context: {username, role, via}.
+
+    Order of resolution:
+        1. Legacy master key (``MYSCAN_API_KEY``) -> admin.
+        2. Per-user API key (stored hashed) -> the user's role.
+        3. Signed session token -> the embedded role.
+    Returns None when nothing matches (unless auth is disabled).
+    """
     if not auth_enabled():
-        return True
+        return {"username": "", "role": default_role(), "via": "open"}
     if not token:
-        return False
-    return hmac.compare_digest(token, API_KEY)
+        return None
+    if API_KEY and hmac.compare_digest(token, API_KEY):
+        return {"username": "admin", "role": "admin", "via": "master"}
+    try:
+        key = store.get_api_key_by_hash(userlib.hash_api_key(token))
+    except Exception:
+        # Store may not be initialized in this process yet.
+        key = None
+    if key and not key["revoked"] and key["active"]:
+        store.touch_api_key(key["key_id"])
+        return {"username": key["username"], "role": key["role"], "via": "key"}
+    session = userlib.verify_session_token(token)
+    if session:
+        user = store.get_user(session["username"])
+        if user and user["active"]:
+            return {"username": user["username"], "role": user["role"], "via": "session"}
+    return None
+
+
+def current_auth() -> dict:
+    """Auth context for the current request (see _resolve_auth)."""
+    ctx = getattr(g, "auth_context", None)
+    if ctx is None:
+        ctx = _resolve_auth(_extract_token()) or {
+            "username": "",
+            "role": default_role(),
+            "via": "none",
+        }
+        g.auth_context = ctx
+    return ctx
 
 
 def require_auth(view):
-    """Decorator: reject requests without a valid API key (when auth is enabled)."""
+    """Decorator: reject requests without valid credentials (when enabled)."""
 
     @wraps(view)
     def wrapped(*args, **kwargs):
-        if not _token_valid(_extract_token()):
+        ctx = current_auth()
+        if ctx["via"] == "none":
             return (
-                jsonify({"error": "Unauthorized. Provide a valid API key."}),
+                jsonify({"error": "Unauthorized. Provide a valid API key or session."}),
                 401,
                 {"WWW-Authenticate": 'Bearer realm="myscan"'},
             )
         return view(*args, **kwargs)
 
     return wrapped
+
+
+def require_role(minimum: str):
+    """Decorator: require a role of at least ``minimum`` (admin >= operator >= viewer).
+
+    Usage: ``@require_role("operator")``.
+    """
+
+    def decorator(view):
+        @wraps(view)
+        def wrapped(*args, **kwargs):
+            ctx = current_auth()
+            if ctx["via"] == "none":
+                return (
+                    jsonify({"error": "Unauthorized. Provide a valid API key or session."}),
+                    401,
+                    {"WWW-Authenticate": 'Bearer realm="myscan"'},
+                )
+            if not userlib.role_at_least(ctx["role"], minimum):
+                return (
+                    jsonify(
+                        {
+                            "error": "Forbidden. "
+                            f"This action requires the '{minimum}' role or higher."
+                        }
+                    ),
+                    403,
+                )
+            return view(*args, **kwargs)
+
+        return wrapped
+
+    return decorator
 
 
 # --------------------------------------------------------------------------
@@ -132,6 +223,25 @@ def check_rate_limit() -> tuple[bool, int]:
             hits.popleft()
         burst = sum(1 for t in hits if now - t <= 1.0)
         if len(hits) >= RATE_LIMIT_PER_MINUTE or burst >= RATE_LIMIT_BURST:
+            retry_after = int(60.0 - (now - hits[0])) + 1 if hits else 1
+            return False, max(retry_after, 1)
+        hits.append(now)
+    return True, 0
+
+
+_login_hits: dict[str, deque] = defaultdict(deque)
+_login_lock = threading.Lock()
+
+
+def check_login_rate_limit() -> tuple[bool, int]:
+    """Stricter per-IP limit for the login endpoint (brute-force mitigation)."""
+    now = time.monotonic()
+    key = _client_key()
+    with _login_lock:
+        hits = _login_hits.setdefault(key, deque())
+        while hits and now - hits[0] > 60.0:
+            hits.popleft()
+        if len(hits) >= RATE_LIMIT_LOGIN_PER_MINUTE:
             retry_after = int(60.0 - (now - hits[0])) + 1 if hits else 1
             return False, max(retry_after, 1)
         hits.append(now)

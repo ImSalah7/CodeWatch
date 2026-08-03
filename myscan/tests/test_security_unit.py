@@ -26,16 +26,24 @@ def app():
 
 
 class TestTokenValidation:
-    def test_no_key_configured_allows_all(self):
-        assert security._token_valid("") is True
-        assert security._token_valid("anything") is True
+    def test_no_key_configured_allows_all(self, monkeypatch):
+        monkeypatch.setattr(security, "API_KEY", "")
+        monkeypatch.setattr(security.store, "list_users", list)
+        assert security.auth_enabled() is False
+        ctx = security._resolve_auth("")
+        assert ctx is not None
+        assert ctx["via"] == "open"
 
     def test_key_configured(self, monkeypatch):
         monkeypatch.setattr(security, "API_KEY", "sekret")
+        monkeypatch.setattr(security.store, "list_users", list)
         assert security.auth_enabled() is True
-        assert security._token_valid("sekret") is True
-        assert security._token_valid("wrong") is False
-        assert security._token_valid("") is False
+        ctx = security._resolve_auth("sekret")
+        assert ctx is not None
+        assert ctx["via"] == "master"
+        assert ctx["role"] == "admin"
+        assert security._resolve_auth("wrong") is None
+        assert security._resolve_auth("") is None
 
 
 class TestBlockedIPs:

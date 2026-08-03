@@ -89,7 +89,11 @@ CREATE TABLE IF NOT EXISTS findings (
     root_cause          TEXT,
     occurrences         INTEGER DEFAULT 1,
     locations_json      TEXT,
-    evidence_json       TEXT
+    evidence_json       TEXT,
+    verification_level  TEXT,
+    matched_pattern     TEXT,
+    likely_false_positive INTEGER DEFAULT 0,
+    likely_fp_reason    TEXT
 );
 
 CREATE TABLE IF NOT EXISTS finding_state (
@@ -97,6 +101,7 @@ CREATE TABLE IF NOT EXISTS finding_state (
     fingerprint         TEXT NOT NULL,
     suppressed          INTEGER DEFAULT 0,
     is_false_positive   INTEGER DEFAULT 0,
+    verified            INTEGER DEFAULT 0,
     assignee            TEXT,
     issue_url           TEXT,
     notes               TEXT,
@@ -110,6 +115,27 @@ CREATE INDEX IF NOT EXISTS idx_findings_sev ON findings(severity);
 CREATE INDEX IF NOT EXISTS idx_findings_rule ON findings(rule_id);
 CREATE INDEX IF NOT EXISTS idx_findings_lang ON findings(language);
 CREATE INDEX IF NOT EXISTS idx_scans_started ON scans(started_at);
+
+CREATE TABLE IF NOT EXISTS users (
+    username        TEXT PRIMARY KEY,
+    password_hash   TEXT NOT NULL,
+    role            TEXT NOT NULL DEFAULT 'viewer',
+    active          INTEGER NOT NULL DEFAULT 1,
+    created_at      TEXT NOT NULL,
+    updated_at      TEXT NOT NULL
+);
+
+CREATE TABLE IF NOT EXISTS api_keys (
+    id          INTEGER PRIMARY KEY AUTOINCREMENT,
+    username    TEXT NOT NULL,
+    key_hash    TEXT NOT NULL UNIQUE,
+    label       TEXT,
+    created_at  TEXT NOT NULL,
+    last_used   TEXT,
+    revoked     INTEGER NOT NULL DEFAULT 0
+);
+
+CREATE INDEX IF NOT EXISTS idx_api_keys_user ON api_keys(username);
 """
 
 
@@ -136,10 +162,19 @@ def _migrate(conn: sqlite3.Connection) -> None:
         "occurrences": "ALTER TABLE findings ADD COLUMN occurrences INTEGER DEFAULT 1",
         "locations_json": "ALTER TABLE findings ADD COLUMN locations_json TEXT",
         "evidence_json": "ALTER TABLE findings ADD COLUMN evidence_json TEXT",
+        "verification_level": "ALTER TABLE findings ADD COLUMN verification_level TEXT",
+        "matched_pattern": "ALTER TABLE findings ADD COLUMN matched_pattern TEXT",
+        "likely_false_positive": "ALTER TABLE findings ADD COLUMN likely_false_positive INTEGER DEFAULT 0",
+        "likely_fp_reason": "ALTER TABLE findings ADD COLUMN likely_fp_reason TEXT",
     }
     for name, ddl in additions.items():
         if name not in existing:
             conn.execute(ddl)
+    state_existing = {
+        row[1] for row in conn.execute("PRAGMA table_info(finding_state)").fetchall()
+    }
+    if "verified" not in state_existing:
+        conn.execute("ALTER TABLE finding_state ADD COLUMN verified INTEGER DEFAULT 0")
 
 
 def _connect() -> sqlite3.Connection:
@@ -195,17 +230,26 @@ def finding_row_to_dict(row) -> dict:
     assignee = _state_val("state_assignee", "assignee")
     issue_url = _state_val("state_issue_url", "issue_url")
     notes = _state_val("state_notes", "notes")
+    verified = _state_val("state_verified", "verified")
     state: dict = {}
     if suppressed:
         state["suppressed"] = True
     if state_fp:
         state["is_false_positive"] = True
+    if verified:
+        state["verified"] = True
     if assignee:
         state["assignee"] = assignee
     if issue_url:
         state["issue_url"] = issue_url
     if notes:
         state["notes"] = notes
+    def row_val(name: str, default: str = "") -> str:
+        return row[name] if name in row_keys and row[name] is not None else default
+
+    def row_flag(name: str) -> bool:
+        return bool(row[name]) if name in row_keys and row[name] is not None else False
+
     return {
         "rule_id": row["rule_id"] or "",
         "title": row["title"] or "",
@@ -251,6 +295,10 @@ def finding_row_to_dict(row) -> dict:
         "state": state,
         "reachability": row["reachability"] or "",
         "root_cause": row["root_cause"] or "",
+        "verification_level": row_val("verification_level"),
+        "matched_pattern": row_val("matched_pattern"),
+        "likely_false_positive": row_flag("likely_false_positive"),
+        "likely_false_positive_reason": row_val("likely_fp_reason"),
     }
 
 
@@ -297,6 +345,10 @@ def _finding_to_row(scan_id: str, f: dict) -> tuple:
         f.get("occurrences", 1) or 1,
         json.dumps(f.get("locations", [])),
         json.dumps(f.get("evidence", [])),
+        f.get("verification_level", "") or "",
+        f.get("matched_pattern", "") or "",
+        1 if f.get("likely_false_positive") else 0,
+        f.get("likely_false_positive_reason", "") or "",
     )
 
 
@@ -351,6 +403,7 @@ _FINDING_COLUMNS = (
     "impact", "why_vulnerable", "is_false_positive", "confidence_reasoning",
     "tags_json", "raw_secret", "reachability", "root_cause",
     "occurrences", "locations_json", "evidence_json",
+    "verification_level", "matched_pattern", "likely_false_positive", "likely_fp_reason",
 )
 
 
@@ -483,6 +536,8 @@ def get_findings(
         where.append("COALESCE(fs.is_false_positive, 0) = 1")
     elif status == "real":
         where.append("COALESCE(fs.is_false_positive, 0) = 0")
+    elif status == "likely_fp":
+        where.append("COALESCE(f.likely_false_positive, 0) = 1")
     if search:
         where.append(
             "(LOWER(f.title) LIKE ? OR LOWER(f.rule_id) LIKE ? OR LOWER(f.file_path) LIKE ? "
@@ -509,8 +564,9 @@ def get_findings(
         ).fetchone()[0]
         rows = conn.execute(
             f"SELECT f.*, fs.suppressed AS state_suppressed, "
-            f"fs.is_false_positive AS state_fp, fs.assignee AS state_assignee, "
-            f"fs.issue_url AS state_issue_url, fs.notes AS state_notes "
+            f"fs.is_false_positive AS state_fp, fs.verified AS state_verified, "
+            f"fs.assignee AS state_assignee, fs.issue_url AS state_issue_url, "
+            f"fs.notes AS state_notes "
             f"{from_clause}{where_sql}{order_sql} LIMIT ? OFFSET ?",
             params + [int(limit), int(offset)],
         ).fetchall()
@@ -523,6 +579,7 @@ def get_finding_by_fingerprint(fingerprint: str) -> dict | None:
         row = conn.execute(
             "SELECT f.*, s.target AS scan_target, s.completed_at AS scan_date, "
             "fs.suppressed AS state_suppressed, fs.is_false_positive AS state_fp, "
+            "fs.verified AS state_verified, "
             "fs.assignee AS state_assignee, fs.issue_url AS state_issue_url, "
             "fs.notes AS state_notes "
             "FROM findings f JOIN scans s ON s.job_id = f.scan_id "
@@ -582,14 +639,14 @@ def global_search(q: str, limit: int = 50) -> list[dict]:
 def set_finding_state(scan_id: str, fingerprint: str, **fields) -> dict:
     """Create or update the triage state row for a finding.
 
-    Supported fields: suppressed, is_false_positive, assignee, issue_url, notes.
+    Supported fields: suppressed, is_false_positive, verified, assignee, issue_url, notes.
     """
-    allowed = {"suppressed", "is_false_positive", "assignee", "issue_url", "notes"}
+    allowed = {"suppressed", "is_false_positive", "verified", "assignee", "issue_url", "notes"}
     updates = {k: v for k, v in fields.items() if k in allowed}
     if not updates:
         with closing(_connect()) as conn:
             row = conn.execute(
-                "SELECT suppressed, is_false_positive, assignee, issue_url, notes "
+                "SELECT suppressed, is_false_positive, verified, assignee, issue_url, notes "
                 "FROM finding_state WHERE scan_id = ? AND fingerprint = ?",
                 (scan_id, fingerprint),
             ).fetchone()
@@ -608,7 +665,7 @@ def set_finding_state(scan_id: str, fingerprint: str, **fields) -> dict:
         )
         conn.commit()
         row = conn.execute(
-            "SELECT suppressed, is_false_positive, assignee, issue_url, notes "
+            "SELECT suppressed, is_false_positive, verified, assignee, issue_url, notes "
             "FROM finding_state WHERE scan_id = ? AND fingerprint = ?",
             (scan_id, fingerprint),
         ).fetchone()
@@ -621,6 +678,8 @@ def _state_row_to_dict(row) -> dict:
         state["suppressed"] = True
     if row["is_false_positive"]:
         state["is_false_positive"] = True
+    if row["verified"]:
+        state["verified"] = True
     if row["assignee"]:
         state["assignee"] = row["assignee"]
     if row["issue_url"]:
@@ -634,7 +693,7 @@ def get_scan_states(scan_id: str) -> dict[str, dict]:
     """Return {fingerprint: state} for every triaged finding in a scan."""
     with closing(_connect()) as conn:
         rows = conn.execute(
-            "SELECT fingerprint, suppressed, is_false_positive, assignee, "
+            "SELECT fingerprint, suppressed, is_false_positive, verified, assignee, "
             "issue_url, notes FROM finding_state WHERE scan_id = ?",
             (scan_id,),
         ).fetchall()
@@ -755,3 +814,168 @@ def prune_history(max_history: int) -> int:
             removed += 1
         conn.commit()
     return removed
+
+
+# --------------------------------------------------------------------------
+# User accounts
+# --------------------------------------------------------------------------
+
+def create_user(username: str, password_hash: str, role: str = "viewer") -> None:
+    """Insert a user. Raises sqlite3.IntegrityError on duplicate username."""
+    now = _utcnow()
+    with closing(_connect()) as conn:
+        conn.execute(
+            "INSERT INTO users (username, password_hash, role, active, created_at, updated_at) "
+            "VALUES (?, ?, ?, 1, ?, ?)",
+            (username, password_hash, role, now, now),
+        )
+        conn.commit()
+
+
+def get_user(username: str) -> dict | None:
+    with closing(_connect()) as conn:
+        row = conn.execute(
+            "SELECT username, password_hash, role, active, created_at, updated_at "
+            "FROM users WHERE username = ?",
+            (username,),
+        ).fetchone()
+    return _user_row_to_dict(row) if row else None
+
+
+def list_users() -> list[dict]:
+    with closing(_connect()) as conn:
+        rows = conn.execute(
+            "SELECT username, password_hash, role, active, created_at, updated_at "
+            "FROM users ORDER BY username"
+        ).fetchall()
+    return [_user_row_to_dict(r) for r in rows]
+
+
+def update_user(username: str, **fields) -> dict | None:
+    """Update a user's password_hash/role/active. Returns the updated user."""
+    allowed = {"password_hash", "role", "active"}
+    updates = {k: v for k, v in fields.items() if k in allowed and v is not None}
+    if not updates:
+        return get_user(username)
+    updates["updated_at"] = _utcnow()
+    set_clause = ", ".join(f"{k} = ?" for k in updates)
+    with closing(_connect()) as conn:
+        conn.execute(
+            f"UPDATE users SET {set_clause} WHERE username = ?",
+            list(updates.values()) + [username],
+        )
+        conn.commit()
+    return get_user(username)
+
+
+def delete_user(username: str) -> bool:
+    with closing(_connect()) as conn:
+        conn.execute("DELETE FROM api_keys WHERE username = ?", (username,))
+        cur = conn.execute("DELETE FROM users WHERE username = ?", (username,))
+        conn.commit()
+    return cur.rowcount > 0
+
+
+def _user_row_to_dict(row) -> dict:
+    return {
+        "username": row["username"],
+        "password_hash": row["password_hash"],
+        "role": row["role"],
+        "active": bool(row["active"]),
+        "created_at": row["created_at"],
+        "updated_at": row["updated_at"],
+    }
+
+
+def user_public_dict(user: dict) -> dict:
+    """Shape of a user for API responses (never exposes the password hash)."""
+    return {
+        "username": user["username"],
+        "role": user["role"],
+        "active": user["active"],
+        "created_at": user["created_at"],
+    }
+
+
+# --------------------------------------------------------------------------
+# API keys (per-user, hashed at rest)
+# --------------------------------------------------------------------------
+
+def add_api_key(username: str, key_hash: str, label: str = "") -> int:
+    with closing(_connect()) as conn:
+        cur = conn.execute(
+            "INSERT INTO api_keys (username, key_hash, label, created_at, revoked) "
+            "VALUES (?, ?, ?, ?, 0)",
+            (username, key_hash, label or "", _utcnow()),
+        )
+        conn.commit()
+    return int(cur.lastrowid)
+
+
+def list_api_keys(username: str) -> list[dict]:
+    with closing(_connect()) as conn:
+        rows = conn.execute(
+            "SELECT id, username, label, created_at, last_used, revoked "
+            "FROM api_keys WHERE username = ? ORDER BY created_at DESC",
+            (username,),
+        ).fetchall()
+    return [
+        {
+            "id": r["id"],
+            "username": r["username"],
+            "label": r["label"] or "",
+            "created_at": r["created_at"],
+            "last_used": r["last_used"] or "",
+            "revoked": bool(r["revoked"]),
+        }
+        for r in rows
+    ]
+
+
+def get_api_key_by_hash(key_hash: str) -> dict | None:
+    """Return the api_key row joined to its user, or None."""
+    with closing(_connect()) as conn:
+        row = conn.execute(
+            "SELECT k.id AS key_id, k.username, k.label, k.revoked, k.last_used, "
+            "u.role, u.active "
+            "FROM api_keys k JOIN users u ON u.username = k.username "
+            "WHERE k.key_hash = ?",
+            (key_hash,),
+        ).fetchone()
+    if not row:
+        return None
+    return {
+        "key_id": row["key_id"],
+        "username": row["username"],
+        "label": row["label"] or "",
+        "revoked": bool(row["revoked"]),
+        "last_used": row["last_used"] or "",
+        "role": row["role"],
+        "active": bool(row["active"]),
+    }
+
+
+def revoke_api_key(username: str, key_id: int) -> bool:
+    with closing(_connect()) as conn:
+        cur = conn.execute(
+            "UPDATE api_keys SET revoked = 1 WHERE id = ? AND username = ?",
+            (int(key_id), username),
+        )
+        conn.commit()
+    return cur.rowcount > 0
+
+
+def delete_api_key(username: str, key_id: int) -> bool:
+    with closing(_connect()) as conn:
+        cur = conn.execute(
+            "DELETE FROM api_keys WHERE id = ? AND username = ?",
+            (int(key_id), username),
+        )
+        conn.commit()
+    return cur.rowcount > 0
+
+
+def touch_api_key(key_id: int) -> None:
+    with closing(_connect()) as conn:
+        conn.execute("UPDATE api_keys SET last_used = ? WHERE id = ?", (_utcnow(), int(key_id)))
+        conn.commit()

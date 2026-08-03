@@ -2,6 +2,23 @@
 
 Prioritized by impact. Items are community/enterprise driven; the order may change.
 
+## Current state
+
+Working tree is healthy: backend tests green (470 pass), ruff clean, frontend `lint` + `build` green, docs-sync OK, benchmark precision 1.000 / recall 1.000. Web UI functional; local and remote (git) scanning verified working.
+
+Recently committed / verified in this session:
+
+- **Detection quality program** — severity gating, secret quality rules, evidence surfacing, likely-FP + user verification, precision/recall benchmark (1.000 / 1.000, zero clean-corpus findings).
+- **Secret scan precision hardening** — multi-signal gate (`src/core/secret_signals.py`) rejects placeholder/prose/weak/uniform/example values before findings are created; `secret_confidence_threshold` classifies weak-but-passing secrets as likely FPs.
+- **Multi-user auth backend** — `src/users.py` + `tests/test_auth.py`, `src/store.py` (users/api_keys tables + CRUD), `src/security.py` (roles, sessions, login rate limit), `src/api.py` (auth + user/key endpoints, role-gated routes), `src/cli.py` (`users` group), `.env.example` additions. Frontend auth (login page, HttpOnly session cookie via proxy, role-aware sidebar + admin users page) is the remaining half.
+
+Machine config done: `git config --global core.longpaths true`.
+
+## Next session — recommended order
+
+1. **Resume multi-user auth frontend** — login page, HttpOnly session cookie flow through the Next.js proxy, role-aware sidebar, admin users page (backend endpoints are ready and green).
+2. Continue with the medium features below.
+
 ## Now (short term)
 
 - [ ] **Type checking (mypy)** — blocked on mypy 2.x module-resolution collision with the `src/__init__.py` package layout (`Source file found twice: "src" and "src.__init__"`); see [ci-cd.md](ci-cd.md) §4.

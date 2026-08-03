@@ -406,5 +406,173 @@ def benchmark(target, enterprise, tools, output):
     console.print(f"\n[dim]Total benchmark duration: {result.duration:.1f}s[/dim]")
 
 
+@cli.group()
+def users():
+    """Manage user accounts and API keys (multi-user auth)."""
+
+
+@users.command("create")
+@click.argument("username")
+@click.option("--password", prompt=True, hide_input=True, confirmation_prompt=True)
+@click.option("--role", default="viewer", type=click.Choice(["admin", "operator", "viewer"]),
+              help="Role for the new account")
+def users_create(username, password, role):
+    """Create a user account."""
+    from . import store
+    from . import users as userlib
+
+    store.init_store()
+    if len(password) < 8:
+        console.print("[red]Password must be at least 8 characters.[/red]")
+        raise click.Abort()
+    if store.get_user(username):
+        console.print(f"[red]User already exists: {username}[/red]")
+        raise click.Abort()
+    store.create_user(username, userlib.hash_password(password), role)
+    console.print(f"[green]Created user '{username}' with role '{role}'.[/green]")
+
+
+@users.command("list")
+def users_list():
+    """List user accounts."""
+    from . import store
+
+    store.init_store()
+    table = Table(title="Users")
+    table.add_column("Username", style="bold")
+    table.add_column("Role")
+    table.add_column("Active")
+    table.add_column("Created")
+    for u in store.list_users():
+        table.add_row(u["username"], u["role"], "yes" if u["active"] else "no", u["created_at"])
+    console.print(table)
+
+
+@users.command("set-password")
+@click.argument("username")
+@click.option("--password", prompt=True, hide_input=True, confirmation_prompt=True)
+def users_set_password(username, password):
+    """Reset a user's password."""
+    from . import store
+    from . import users as userlib
+
+    store.init_store()
+    if len(password) < 8:
+        console.print("[red]Password must be at least 8 characters.[/red]")
+        raise click.Abort()
+    if not store.update_user(username, password_hash=userlib.hash_password(password)):
+        console.print(f"[red]User not found: {username}[/red]")
+        raise click.Abort()
+    console.print(f"[green]Password updated for '{username}'.[/green]")
+
+
+@users.command("set-role")
+@click.argument("username")
+@click.argument("role", type=click.Choice(["admin", "operator", "viewer"]))
+def users_set_role(username, role):
+    """Change a user's role."""
+    from . import store
+
+    store.init_store()
+    if not store.update_user(username, role=role):
+        console.print(f"[red]User not found: {username}[/red]")
+        raise click.Abort()
+    console.print(f"[green]Role for '{username}' set to '{role}'.[/green]")
+
+
+@users.command("disable")
+@click.argument("username")
+def users_disable(username):
+    """Deactivate a user account."""
+    from . import store
+
+    store.init_store()
+    if not store.update_user(username, active=0):
+        console.print(f"[red]User not found: {username}[/red]")
+        raise click.Abort()
+    console.print(f"[green]User '{username}' disabled.[/green]")
+
+
+@users.command("enable")
+@click.argument("username")
+def users_enable(username):
+    """Reactivate a user account."""
+    from . import store
+
+    store.init_store()
+    if not store.update_user(username, active=1):
+        console.print(f"[red]User not found: {username}[/red]")
+        raise click.Abort()
+    console.print(f"[green]User '{username}' enabled.[/green]")
+
+
+@users.command("delete")
+@click.argument("username")
+@click.confirmation_option(prompt="Delete this user and all their API keys?")
+def users_delete(username):
+    """Delete a user account and their API keys."""
+    from . import store
+
+    store.init_store()
+    if not store.delete_user(username):
+        console.print(f"[red]User not found: {username}[/red]")
+        raise click.Abort()
+    console.print(f"[green]User '{username}' deleted.[/green]")
+
+
+@users.command("add-key")
+@click.argument("username")
+@click.option("--label", default="", help="Optional label for the key")
+def users_add_key(username, label):
+    """Generate a new API key for a user (shown exactly once)."""
+    from . import store
+    from . import users as userlib
+
+    store.init_store()
+    if not store.get_user(username):
+        console.print(f"[red]User not found: {username}[/red]")
+        raise click.Abort()
+    raw = userlib.generate_api_key()
+    key_id = store.add_api_key(username, userlib.hash_api_key(raw), label)
+    console.print(f"[green]API key for '{username}' (id {key_id}):[/green]")
+    console.print(f"[cyan]{raw}[/cyan]")
+    console.print("[yellow]Store this key now; only a hash is kept and it cannot be shown again.[/yellow]")
+
+
+@users.command("list-keys")
+@click.argument("username")
+def users_list_keys(username):
+    """List a user's API keys."""
+    from . import store
+
+    store.init_store()
+    table = Table(title=f"API Keys - {username}")
+    table.add_column("ID")
+    table.add_column("Label")
+    table.add_column("Created")
+    table.add_column("Last Used")
+    table.add_column("Revoked")
+    for k in store.list_api_keys(username):
+        table.add_row(
+            str(k["id"]), k["label"], k["created_at"], k["last_used"],
+            "yes" if k["revoked"] else "no",
+        )
+    console.print(table)
+
+
+@users.command("revoke-key")
+@click.argument("username")
+@click.argument("key_id", type=int)
+def users_revoke_key(username, key_id):
+    """Revoke a user's API key."""
+    from . import store
+
+    store.init_store()
+    if not store.revoke_api_key(username, key_id):
+        console.print(f"[red]Key {key_id} not found for user '{username}'.[/red]")
+        raise click.Abort()
+    console.print(f"[green]Key {key_id} revoked.[/green]")
+
+
 if __name__ == "__main__":
     cli()
