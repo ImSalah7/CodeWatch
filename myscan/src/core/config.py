@@ -74,6 +74,7 @@ class ScanConfig:
     max_workers: int = 4
     cache_enabled: bool = True
     min_confidence: float = 0.15
+    secret_confidence_threshold: float = 0.6
 
     @property
     def skip_dirs(self) -> set[str]:

@@ -24,6 +24,10 @@ export interface Finding {
   cvss?: { score: number; vector: string; severity: string };
   exploitability?: string;
   reachability?: string;
+  verification_level?: string;
+  matched_pattern?: string;
+  likely_false_positive?: boolean;
+  likely_false_positive_reason?: string;
   evidence?: Array<{ type: string; detail: string; matched?: string; line?: number }>;
   fix_suggestion?: string;
   fixed_code?: string;
@@ -48,6 +52,7 @@ export interface Finding {
   state?: {
     suppressed?: boolean;
     is_false_positive?: boolean;
+    verified?: boolean;
     assignee?: string;
     issue_url?: string;
     notes?: string;
@@ -90,6 +95,7 @@ export interface FindingsResponse {
 export interface FindingState {
   suppressed?: boolean;
   is_false_positive?: boolean;
+  verified?: boolean;
   assignee?: string;
   issue_url?: string;
   notes?: string;

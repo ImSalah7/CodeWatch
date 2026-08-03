@@ -3,7 +3,7 @@
 import { useEffect, useState } from "react";
 import Link from "next/link";
 import { SeverityBadge } from "@/components/ui/SeverityBadge";
-import { getFindingDetail } from "@/lib/api";
+import { getFindingDetail, bulkFindingAction } from "@/lib/api";
 import type { FindingDetail } from "@/lib/api";
 import {
   ArrowLeft,
@@ -20,6 +20,10 @@ import {
   Cpu,
   CheckCircle2,
   Loader2,
+  ScanSearch,
+  XCircle,
+  AlertTriangle,
+  Bug,
 } from "lucide-react";
 
 export function FindingDetailClient({ fingerprint }: { fingerprint: string }) {
@@ -28,8 +32,11 @@ export function FindingDetailClient({ fingerprint }: { fingerprint: string }) {
   const [error, setError] = useState("");
   const [copied, setCopied] = useState(false);
   const [showSecret, setShowSecret] = useState(false);
+  const [busy, setBusy] = useState(false);
+  const [actionError, setActionError] = useState("");
+  const [actionMsg, setActionMsg] = useState("");
 
-  useEffect(() => {
+  const reload = () => {
     getFindingDetail(fingerprint)
       .then((d) => {
         setFinding(d);
@@ -39,7 +46,33 @@ export function FindingDetailClient({ fingerprint }: { fingerprint: string }) {
         setError(e.message || "Finding not found");
         setLoading(false);
       });
+  };
+
+  useEffect(() => {
+    reload();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [fingerprint]);
+
+  const verify = async (action: "mark_real" | "mark_false_positive") => {
+    if (!finding || busy) return;
+    setBusy(true);
+    setActionError("");
+    setActionMsg("");
+    try {
+      await bulkFindingAction({
+        scan_id: finding.scan_id,
+        action,
+        fingerprints: [finding.fingerprint || ""],
+      });
+      setActionMsg(action === "mark_real" ? "Marked as a real finding" : "Marked as a false positive");
+      reload();
+      window.setTimeout(() => setActionMsg(""), 3000);
+    } catch (e: unknown) {
+      setActionError(e instanceof Error ? e.message : "Action failed");
+    } finally {
+      setBusy(false);
+    }
+  };
 
   if (loading)
     return (
@@ -143,6 +176,12 @@ export function FindingDetailClient({ fingerprint }: { fingerprint: string }) {
             {finding.reachability}
           </span>
         )}
+        {finding.verification_level && finding.verification_level !== "unverified" && (
+          <span className="flex items-center gap-1 text-xs px-2.5 py-1 rounded-lg bg-emerald-500/10 text-emerald-400 border border-emerald-500/20">
+            <CheckCircle2 className="w-3 h-3" />
+            Verified: {finding.verification_level}
+          </span>
+        )}
         {finding.is_false_positive && (
           <span className="text-xs px-2.5 py-1 rounded-lg bg-emerald-500/10 text-emerald-400 border border-emerald-500/20">
             <CheckCircle2 className="w-3 h-3 inline mr-1" />
@@ -150,6 +189,74 @@ export function FindingDetailClient({ fingerprint }: { fingerprint: string }) {
           </span>
         )}
       </div>
+
+      {actionMsg && (
+        <div className="flex items-center gap-2 text-xs text-emerald-400 bg-emerald-500/10 border border-emerald-500/20 rounded-lg px-3 py-2">
+          <CheckCircle2 className="w-3.5 h-3.5" /> {actionMsg}
+        </div>
+      )}
+      {actionError && (
+        <div className="flex items-center gap-2 text-xs text-red-400 bg-red-500/10 border border-red-500/20 rounded-lg px-3 py-2">
+          <AlertTriangle className="w-3.5 h-3.5" /> {actionError}
+        </div>
+      )}
+
+      {finding.likely_false_positive && !finding.is_false_positive && !finding.state?.verified && (
+        <div className="bg-amber-500/5 border border-amber-500/25 rounded-xl p-4">
+          <div className="flex items-start gap-2 mb-2">
+            <AlertTriangle className="w-4 h-4 text-amber-400 flex-shrink-0 mt-0.5" />
+            <div>
+              <p className="text-[11px] text-amber-400 uppercase tracking-wider font-medium">
+                Likely False Positive
+              </p>
+              {finding.likely_false_positive_reason && (
+                <p className="text-xs text-zinc-300 leading-relaxed mt-1">{finding.likely_false_positive_reason}</p>
+              )}
+            </div>
+          </div>
+          <div className="flex flex-wrap items-center gap-2 mt-1">
+            <button
+              disabled={busy}
+              onClick={() => void verify("mark_real")}
+              className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-zinc-800 border border-zinc-700 text-xs text-zinc-200 hover:border-emerald-500/50 hover:text-emerald-300 disabled:opacity-40 transition"
+            >
+              <CheckCircle2 className="w-3 h-3" />
+              Confirm real
+            </button>
+            <button
+              disabled={busy}
+              onClick={() => void verify("mark_false_positive")}
+              className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-zinc-800 border border-zinc-700 text-xs text-zinc-200 hover:border-red-500/50 hover:text-red-300 disabled:opacity-40 transition"
+            >
+              <Bug className="w-3 h-3" />
+              Mark as false positive
+            </button>
+          </div>
+        </div>
+      )}
+
+      {finding.is_false_positive && (
+        <div className="flex items-center justify-between gap-3 bg-emerald-500/5 border border-emerald-500/20 rounded-xl p-4">
+          <p className="text-xs text-emerald-400 flex items-center gap-2">
+            <CheckCircle2 className="w-3.5 h-3.5" />
+            Marked as a false positive
+          </p>
+          <button
+            disabled={busy}
+            onClick={() => void verify("mark_real")}
+            className="px-3 py-1.5 rounded-lg bg-zinc-800 border border-zinc-700 text-xs text-zinc-200 hover:border-emerald-500/50 hover:text-emerald-300 disabled:opacity-40 transition"
+          >
+            Mark as real
+          </button>
+        </div>
+      )}
+
+      {finding.state?.verified && !finding.is_false_positive && !finding.likely_false_positive && (
+        <div className="flex items-center gap-2 bg-emerald-500/5 border border-emerald-500/20 rounded-xl p-4">
+          <CheckCircle2 className="w-3.5 h-3.5 text-emerald-400" />
+          <p className="text-xs text-emerald-400">Verified as a real finding</p>
+        </div>
+      )}
 
       <div className="bg-zinc-900 border border-zinc-800 rounded-xl p-4">
         <div className="flex items-center justify-between mb-2">
@@ -259,7 +366,72 @@ export function FindingDetailClient({ fingerprint }: { fingerprint: string }) {
             <FileCode className="w-4 h-4 text-zinc-500" />
             <p className="text-[11px] text-zinc-500 uppercase tracking-wider font-medium">Analysis Reasoning</p>
           </div>
-          <p className="text-xs text-zinc-400 leading-relaxed">{finding.confidence_reasoning}</p>
+          <p className="text-xs text-zinc-400 leading-relaxed whitespace-pre-line">{finding.confidence_reasoning}</p>
+        </div>
+      )}
+
+      {(finding.matched_pattern || (finding.evidence && finding.evidence.length > 0)) && (
+        <div className="bg-zinc-900 border border-zinc-800 rounded-xl p-4">
+          <div className="flex items-center gap-2 mb-3">
+            <ScanSearch className="w-4 h-4 text-blue-400" />
+            <p className="text-[11px] text-blue-400 uppercase tracking-wider font-medium">Detection Evidence</p>
+          </div>
+          {finding.matched_pattern && (
+            <div className="mb-3">
+              <p className="text-[11px] text-zinc-500 mb-1">Matched pattern</p>
+              <pre className="p-3 rounded-lg bg-zinc-950 border border-zinc-800 text-xs font-mono text-blue-300/90 overflow-x-auto">
+                {finding.matched_pattern}
+              </pre>
+            </div>
+          )}
+          {finding.evidence && finding.evidence.length > 0 && (
+            <ul className="space-y-2">
+              {finding.evidence.map((ev, i) => {
+                const wrapper = ev as unknown as {
+                  evidences?: Array<{ reason: string; strength: string; type: string }>;
+                  negativeEvidences?: Array<{ reason: string; strength: string }>;
+                };
+                if (wrapper?.evidences || wrapper?.negativeEvidences) {
+                  return (
+                    <li key={i} className="space-y-1.5">
+                      {wrapper.evidences?.map((e, j) => (
+                        <p key={`p-${j}`} className="text-xs text-emerald-400/90 leading-relaxed flex gap-2">
+                          <CheckCircle2 className="w-3.5 h-3.5 flex-shrink-0 mt-0.5" />
+                          <span>
+                            {e.reason}
+                            <span className="text-zinc-600 ml-1">· {e.strength}{e.type ? ` · ${e.type}` : ""}</span>
+                          </span>
+                        </p>
+                      ))}
+                      {wrapper.negativeEvidences?.map((e, j) => (
+                        <p key={`n-${j}`} className="text-xs text-amber-400/90 leading-relaxed flex gap-2">
+                          <XCircle className="w-3.5 h-3.5 flex-shrink-0 mt-0.5" />
+                          <span>
+                            {e.reason}
+                            <span className="text-zinc-600 ml-1">· {e.strength}</span>
+                          </span>
+                        </p>
+                      ))}
+                    </li>
+                  );
+                }
+                const plain = ev as { type?: string; detail?: string; matched?: string; line?: number };
+                return (
+                  <li key={i} className="text-xs text-zinc-400 leading-relaxed flex gap-2">
+                    <CheckCircle2 className="w-3.5 h-3.5 flex-shrink-0 mt-0.5 text-emerald-400/80" />
+                    <span>
+                      {plain.detail}
+                      {plain.matched && (
+                        <code className="block mt-1 px-2 py-1 rounded bg-zinc-950 border border-zinc-800 font-mono text-[11px] text-zinc-300">
+                          {plain.matched}
+                        </code>
+                      )}
+                    </span>
+                  </li>
+                );
+              })}
+            </ul>
+          )}
         </div>
       )}
 

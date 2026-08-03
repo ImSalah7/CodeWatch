@@ -23,6 +23,7 @@ from .evidence_engine import (
     EvidenceEngine,
     EvidenceStrength,
     EvidenceType,
+    ValidationResult,
 )
 from .import_resolver import ImportResolutionResult
 from .reachability import ReachabilityResult
@@ -56,16 +57,20 @@ PLACEHOLDER_KEYWORDS = {
     "placeholder_key", "change_me", "replace_this",
 }
 
-STRONG_PASSWORD_PATTERNS = re.compile(
-    r"^(?=.*[a-z])(?=.*[A-Z])(?=.*\d)(?=.*[!@#$%^&*]).{12,}$"
+from .secret_signals import (
+    is_weak_credential_value,  # noqa: F401  (re-exported for backwards compatibility)
+    score_secret,
+    secret_rule_kind,
+    STRONG_PASSWORD_PATTERNS,  # noqa: F401  (re-exported for backwards compatibility)
 )
 
 
 class ValidationPipeline:
     """Multi-stage validation pipeline for SAST findings."""
 
-    def __init__(self, min_confidence: float = 0.15):
+    def __init__(self, min_confidence: float = 0.15, secret_confidence_threshold: float = 0.6):
         self.min_confidence = min_confidence
+        self.secret_confidence_threshold = secret_confidence_threshold
         self.evidence_engine = EvidenceEngine(min_confidence=min_confidence)
         self.type_resolver = TypeResolver()
         self._import_cache: ImportResolutionResult | None = None
@@ -176,7 +181,37 @@ class ValidationPipeline:
         validated["verification_level"] = result.verification_level
         validated["evidence"] = result.to_dict()
         validated["validated"] = True
+        likely_fp, likely_fp_reason = self._likely_false_positive(result)
+        is_secret = category == "SECRET" or rule_id.startswith("SEC_")
+        if is_secret and result.confidence < self.secret_confidence_threshold:
+            likely_fp = True
+            threshold_reason = (
+                f"Confidence {result.confidence:.2f} is below the secret confidence "
+                f"threshold ({self.secret_confidence_threshold:.2f})"
+            )
+            likely_fp_reason = "; ".join(filter(None, [likely_fp_reason, threshold_reason]))
+        validated["likely_false_positive"] = likely_fp
+        validated["likely_false_positive_reason"] = likely_fp_reason
         return validated
+
+    def _likely_false_positive(self, result: ValidationResult) -> tuple[bool, str]:
+        """Flag findings that validation still reported but that carry weak or
+        contradictory evidence, so users can triage them first.
+
+        Returns (is_likely_fp, reason). A finding is likely a false positive when
+        validation recorded negative (contradictory) evidence, or when it was
+        reported purely on a regex match without any corroborating evidence.
+        """
+        if result.negative_count > 0:
+            reasons = [e.reason for e in result.negative_evidences if e.reason]
+            reason = "; ".join(reasons) if reasons else "Contradictory evidence found during validation"
+            return True, reason
+        if result.verification_level in ("unverified", "single_evidence") and result.confidence < 0.5:
+            return True, (
+                "Reported on a single regex match without corroborating evidence "
+                f"(confidence {result.confidence:.2f}, verification level '{result.verification_level}')"
+            )
+        return False, ""
 
     def _validate_ast(
         self,
@@ -676,6 +711,57 @@ class ValidationPipeline:
                 )
                 return "value_too_short"
 
+            var_match = re.match(r"\s*(\w+)\s*[=:]", code_snippet)
+            if var_match and var_match.group(1).lower() == stripped.lower():
+                negative_evidences.append(
+                    self.evidence_engine.create_negative_evidence(
+                        signal="self_referential",
+                        reason=(
+                            f"Value '{stripped}' equals the variable name - "
+                            "placeholder, not a real credential"
+                        ),
+                        penalty=-0.80,
+                    )
+                )
+                return "self_referential_value"
+
+            if is_weak_credential_value(stripped):
+                negative_evidences.append(
+                    self.evidence_engine.create_negative_evidence(
+                        signal="weak_value",
+                        reason=(
+                            f"Value '{stripped[:30]}' is a keyboard walk, repeated run, "
+                            "or sequential string - not a real credential"
+                        ),
+                        penalty=-0.80,
+                    )
+                )
+                return "weak_credential_value"
+
+            # Multi-signal gate: require corroborating signals beyond the regex
+            # match. Values that are prose, uniform charset, common words, or
+            # credential-less DB URLs are rejected here even if the scanner was
+            # lenient.
+            variable_match = re.match(r"\s*(\w+)\s*[=:]", code_snippet)
+            varname = variable_match.group(1) if variable_match else ""
+            rule_kind = secret_rule_kind(rule_id)
+            if rule_kind is None and ("://" in stripped or "://" in raw_secret):
+                rule_kind = "db_url"
+            if rule_kind:
+                signal_score = score_secret(rule_kind, stripped, varname, is_literal=True)
+                if not signal_score.reported:
+                    negative_evidences.append(
+                        self.evidence_engine.create_negative_evidence(
+                            signal="multi_signal_reject",
+                            reason=(
+                                f"Value '{stripped[:30]}' rejected by multi-signal "
+                                f"validation: {signal_score.reject_reason}"
+                            ),
+                            penalty=-0.80,
+                        )
+                    )
+                    return f"multi_signal_reject:{signal_score.reject_reason}"
+
         secret_type = self._classify_secret(rule_id, code_snippet, tags)
         if secret_type:
             positive_evidences.append(
@@ -823,6 +909,14 @@ class ValidationPipeline:
             "SEC_DEPLOY_KEY": "Deploy Key",
             "SEC_BEARER_TOKEN": "Bearer Token",
             "SEC_BASIC_AUTH": "Basic Auth Credentials",
+            "SEC_GITHUB_FINE_GRAINED": "GitHub Fine-Grained Token",
+            "SEC_GITLAB_TOKEN": "GitLab Personal Access Token",
+            "SEC_OPENAI_KEY": "OpenAI API Key",
+            "SEC_ANTHROPIC_KEY": "Anthropic API Key",
+            "SEC_HUGGINGFACE_TOKEN": "Hugging Face Token",
+            "SEC_STRIPE_RESTRICTED_KEY": "Stripe Restricted Key",
+            "SEC_AZURE_ACCOUNT_KEY": "Azure Storage Account Key",
+            "SEC_CLOUD_DB_URL_CREDS": "Database Credentials in URL",
         }
 
         if rule_id in classification_map:

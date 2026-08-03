@@ -233,7 +233,7 @@ export function ResultsClient({ initialJobId }: { initialJobId?: string }) {
   };
 
   const applyAction = async (
-    action: "suppress" | "unsuppress" | "mark_false_positive" | "unmark_false_positive" | "assign" | "create_issue",
+    action: "suppress" | "unsuppress" | "mark_false_positive" | "unmark_false_positive" | "mark_real" | "assign" | "create_issue",
     fingerprints: string[],
     value?: string
   ) => {
@@ -439,6 +439,7 @@ export function ResultsClient({ initialJobId }: { initialJobId?: string }) {
                 { value: "all", label: "All" },
                 { value: "real", label: "Confirmed real" },
                 { value: "false_positive", label: "False positives" },
+                { value: "likely_fp", label: "Likely false positives" },
               ]}
             />
             <FilterSelect
@@ -513,7 +514,7 @@ export function ResultsClient({ initialJobId }: { initialJobId?: string }) {
           <BulkButton onClick={() => applyAction("suppress", [...selected])} icon={<EyeOff className="w-3 h-3" />}>Suppress</BulkButton>
           <BulkButton onClick={() => applyAction("unsuppress", [...selected])} icon={<Eye className="w-3 h-3" />}>Unsuppress</BulkButton>
           <BulkButton onClick={() => applyAction("mark_false_positive", [...selected])} icon={<Bug className="w-3 h-3" />}>Mark FP</BulkButton>
-          <BulkButton onClick={() => applyAction("unmark_false_positive", [...selected])} icon={<CheckCircle2 className="w-3 h-3" />}>Mark real</BulkButton>
+          <BulkButton onClick={() => applyAction("mark_real", [...selected])} icon={<CheckCircle2 className="w-3 h-3" />}>Mark real</BulkButton>
           <div className="flex items-center gap-1.5">
             <input
               className="bg-zinc-900 border border-zinc-700 rounded-lg px-2 py-1.5 text-xs text-white placeholder-zinc-500 w-36"
@@ -595,6 +596,7 @@ export function ResultsClient({ initialJobId }: { initialJobId?: string }) {
                   const line = f.line || f.location?.line || 0;
                   const isSuppressed = Boolean(state.suppressed);
                   const isFp = Boolean(state.is_false_positive || f.is_false_positive);
+                  const likelyFp = Boolean(f.likely_false_positive) && !isFp && !Boolean(state.verified);
                   return (
                     <FragmentRow
                       key={id}
@@ -606,6 +608,7 @@ export function ResultsClient({ initialJobId }: { initialJobId?: string }) {
                       isSelected={isSelected}
                       isSuppressed={isSuppressed}
                       isFp={isFp}
+                      likelyFp={likelyFp}
                       state={state}
                       onToggleExpand={() => setExpanded(isExpanded ? null : id)}
                       onToggleSelect={() => toggleSelected(id)}
@@ -778,12 +781,13 @@ function BulkButton({ onClick, icon, children }: { onClick: () => void; icon: Re
   );
 }
 
-function StateChip({ active, label, tone }: { active: boolean; label: string; tone: "emerald" | "amber" | "blue" }) {
+function StateChip({ active, label, tone }: { active: boolean; label: string; tone: "emerald" | "amber" | "blue" | "red" }) {
   if (!active) return null;
   const tones = {
     emerald: "bg-emerald-500/10 text-emerald-400 border-emerald-500/20",
     amber: "bg-amber-500/10 text-amber-400 border-amber-500/20",
     blue: "bg-blue-500/10 text-blue-400 border-blue-500/20",
+    red: "bg-red-500/10 text-red-400 border-red-500/20",
   };
   return (
     <span className={cn("inline-flex items-center px-1.5 py-0.5 rounded border text-[10px]", tones[tone])}>
@@ -801,6 +805,7 @@ function FragmentRow({
   isSelected,
   isSuppressed,
   isFp,
+  likelyFp,
   state,
   onToggleExpand,
   onToggleSelect,
@@ -815,10 +820,11 @@ function FragmentRow({
   isSelected: boolean;
   isSuppressed: boolean;
   isFp: boolean;
+  likelyFp: boolean;
   state: Record<string, unknown>;
   onToggleExpand: () => void;
   onToggleSelect: () => void;
-  onAction: (action: "suppress" | "unsuppress" | "mark_false_positive" | "unmark_false_positive", fingerprints: string[]) => void;
+  onAction: (action: "suppress" | "unsuppress" | "mark_false_positive" | "unmark_false_positive" | "mark_real", fingerprints: string[]) => void;
   busy: boolean;
 }) {
   const locations = f.locations || [];
@@ -863,6 +869,7 @@ function FragmentRow({
           <div className="flex flex-wrap gap-1">
             <StateChip active={isSuppressed} label="Suppressed" tone="amber" />
             <StateChip active={isFp} label="FP" tone="emerald" />
+            <StateChip active={likelyFp} label="Likely FP" tone="red" />
             <StateChip active={Boolean(state.assignee)} label={String(state.assignee)} tone="blue" />
           </div>
         </td>
@@ -893,6 +900,9 @@ function FragmentRow({
                 {f.impact && <DetailBlock label="Impact" text={f.impact} />}
                 {f.exploit_scenario && <DetailBlock label="Exploit scenario" text={f.exploit_scenario} />}
                 {f.confidence_reasoning && <DetailBlock label="Confidence reasoning" text={f.confidence_reasoning} />}
+                {likelyFp && f.likely_false_positive_reason && (
+                  <DetailBlock label="Why it may be a false positive" text={f.likely_false_positive_reason} />
+                )}
               </div>
               <div className="space-y-3">
                 {f.location?.code_snippet && (
@@ -968,10 +978,10 @@ function FragmentRow({
                   </button>
                   <button
                     disabled={busy}
-                    onClick={() => onAction(isFp ? "unmark_false_positive" : "mark_false_positive", [id])}
+                    onClick={() => onAction(isFp ? "unmark_false_positive" : "mark_real", [id])}
                     className="px-3 py-1.5 rounded-lg bg-zinc-800 border border-zinc-700 text-xs text-zinc-300 hover:border-zinc-500 disabled:opacity-40 transition"
                   >
-                    {isFp ? "Mark as real" : "Mark as false positive"}
+                    {isFp ? "Mark as real" : "Confirm real"}
                   </button>
                 </div>
               </div>

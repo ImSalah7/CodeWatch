@@ -73,7 +73,7 @@ def _build_rules() -> list[Rule]:
       "Avoid os.system(). Use subprocess.run() with shell=False and validated input lists.",
       ["https://cwe.mitre.org/data/definitions/78.html"],
       "Full system compromise. Attacker can execute any OS command with the application's privileges.",
-      pattern=r'os\.system\s*\(|os\.popen\s*\(|subprocess\.call.*shell\s*=\s*True|subprocess\.Popen.*shell\s*=\s*True',
+      pattern=r'os\.system\s*\(|os\.popen\s*\(|subprocess\.(?:call|run|check_output|Popen)\s*\([^)]*shell\s*=\s*True',
       cvss={"attack_vector": "N", "attack_complexity": "L", "privileges": "N", "user_interaction": "N", "scope": "C", "confidentiality": "H", "integrity": "H", "availability": "H"})
 
     r("SEC003", "Code Injection via eval()",

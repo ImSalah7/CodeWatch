@@ -360,11 +360,11 @@ class TestSecretDisplayConfig:
 class TestSecretsScannerIntegration:
     def test_scanner_stores_raw_secret(self):
         scanner = SecretsScanner(mask_secrets=False)
-        content = 'password = "admin123"'
+        content = 'password = "P@ssw0rd2024!"'
         findings = scanner.scan_file(content, "test.py", Language.PYTHON)
         assert len(findings) > 0
         assert findings[0].raw_secret != ""
-        assert findings[0].raw_secret == "admin123"
+        assert findings[0].raw_secret == "P@ssw0rd2024!"
         assert "password" in findings[0].location.code_snippet
 
     def test_scanner_masks_by_default(self):
@@ -599,15 +599,15 @@ class TestFullSecretDisplay:
 
     def test_scanner_preserves_raw_secret_for_password(self):
         scanner = SecretsScanner(mask_secrets=True)
-        content = 'password = "admin123"'
+        content = 'password = "P@ssw0rd2024!"'
         findings = scanner.scan_file(content, "test.py", Language.PYTHON)
         assert len(findings) > 0
         f = findings[0]
-        assert f.raw_secret == "admin123"
+        assert f.raw_secret == "P@ssw0rd2024!"
         assert "password" in f.location.code_snippet
 
         display_val = get_secret_display_value(f, SecretDisplayMode.FULL)
-        assert display_val == 'password = "admin123"'
+        assert display_val == 'password = "P@ssw0rd2024!"'
 
     def test_scanner_preserves_raw_secret_for_long_password(self):
         scanner = SecretsScanner(mask_secrets=True)
@@ -634,7 +634,7 @@ class TestFullSecretDisplay:
 
     def test_scanner_preserves_raw_secret_for_aws_key(self):
         scanner = SecretsScanner(mask_secrets=True)
-        content = 'AWS_SECRET = "wJalrXUtnFEMI/K7MDENG/bPxRfiCYEXAMPLEKEY"'
+        content = 'AWS_SECRET = "wJalrXUtnFEMIK7MDENG/bPxRfiCYzK9xQ2"'
         findings = scanner.scan_file(content, "test.py", Language.PYTHON)
         assert len(findings) > 0
         f = findings[0]

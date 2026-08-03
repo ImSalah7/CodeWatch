@@ -34,7 +34,14 @@ class ScanEngine:
         self._validation_pipeline = None
         if validate_findings:
             from .validation_engine import ValidationPipeline
-            self._validation_pipeline = ValidationPipeline(min_confidence=config.min_confidence if hasattr(config, 'min_confidence') else 0.15)
+            self._validation_pipeline = ValidationPipeline(
+                min_confidence=config.min_confidence if hasattr(config, 'min_confidence') else 0.15,
+                secret_confidence_threshold=(
+                    config.secret_confidence_threshold
+                    if hasattr(config, 'secret_confidence_threshold')
+                    else 0.6
+                ),
+            )
         self._load_scanners()
 
     def _load_scanners(self):
@@ -119,6 +126,7 @@ class ScanEngine:
             result.filter_false_positives_with_validation(self._validation_pipeline)
         else:
             result.filter_false_positives()
+        result.apply_severity_gates()
         result.group_duplicates()
         result.scan_end = __import__("datetime").datetime.now(__import__("datetime").timezone.utc)
         result.scan_duration = time.time() - start
@@ -269,6 +277,12 @@ class ScanEngine:
                 cwe_name=enriched.cwe_name if enriched and enriched.cwe_name else "",
             )
 
+            finding.verification_level = (
+                enriched.confidence_level
+                if enriched and enriched.confidence_level
+                else "unverified"
+            )
+
             if enriched and enriched.fix_suggestion:
                 finding.fix_suggestion = enriched.fix_suggestion
             if enriched and enriched.secure_example:
@@ -294,6 +308,7 @@ class ScanEngine:
             result.findings.append(finding)
 
         result.deduplicate()
+        result.apply_severity_gates()
         result.group_duplicates()
         result.scan_end = __import__("datetime").datetime.now(__import__("datetime").timezone.utc)
         result.scan_duration = time.time() - start

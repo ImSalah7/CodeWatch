@@ -121,7 +121,7 @@ export async function getFindings(opts: FindingsQuery = {}): Promise<FindingsRes
 
 export async function bulkFindingAction(opts: {
   scan_id: string;
-  action: "suppress" | "unsuppress" | "mark_false_positive" | "unmark_false_positive" | "assign" | "create_issue";
+  action: "suppress" | "unsuppress" | "mark_false_positive" | "unmark_false_positive" | "mark_real" | "assign" | "create_issue";
   fingerprints: string[];
   value?: string;
 }): Promise<{ updated: number; action: string; states: Record<string, FindingState> }> {

@@ -68,6 +68,37 @@ class TestScanEngine:
             assert result.files_scanned >= 1
             assert len(result.findings) >= 1
 
+    def test_keyboard_walk_not_reported_as_secret(self):
+        with tempfile.TemporaryDirectory() as tmpdir:
+            test_file = Path(tmpdir) / "app.py"
+            test_file.write_text('api_key = "qwertyuiopasdfghjklzxcvbnm1234567890"')
+            config = ScanConfig(include_tests=True, include_docs=True)
+            result = ScanEngine(config).scan(tmpdir)
+            for f in result.findings:
+                assert f.category != FindingCategory.SECRET
+
+    def test_new_secret_patterns_detected(self):
+        with tempfile.TemporaryDirectory() as tmpdir:
+            test_file = Path(tmpdir) / "app.py"
+            test_file.write_text('OPENAI_KEY = "sk-proj-AbCdEfGhIjKlMnOpQrStUvWxYz0123456789_AbCdEfGhI"')
+            config = ScanConfig(include_tests=True, include_docs=True)
+            result = ScanEngine(config).scan(tmpdir)
+            assert any("OpenAI" in f.title for f in result.findings)
+
+    def test_matched_pattern_and_surrounding_code(self):
+        with tempfile.TemporaryDirectory() as tmpdir:
+            test_file = Path(tmpdir) / "app.py"
+            test_file.write_text('OPENAI_KEY = "sk-proj-AbCdEfGhIjKlMnOpQrStUvWxYz0123456789_AbCdEfGhI"')
+            config = ScanConfig(include_tests=True, include_docs=True)
+            result = ScanEngine(config).scan(tmpdir)
+            secret = next(f for f in result.findings if "OpenAI" in f.title)
+            assert secret.matched_pattern
+            assert "sk-" in secret.matched_pattern
+            assert "proj" in secret.matched_pattern
+            assert secret.location.code_snippet.startswith("OPENAI_KEY")
+            assert secret.raw_secret.startswith("sk-proj-")
+            assert secret.to_dict()["matched_pattern"] == secret.matched_pattern
+
     def test_scan_excludes_skip_dirs(self):
         with tempfile.TemporaryDirectory() as tmpdir:
             (Path(tmpdir) / "src").mkdir()

@@ -69,6 +69,7 @@ class SecurityScanner(BaseScanner):
                         impact=rule.impact,
                         why_vulnerable=self._explain(rule, snippet, matched, file_path, i, mechanism),
                         confidence_reasoning=self._confidence_reasoning(rule, matched, i, mechanism),
+                        matched_pattern=rule.pattern,
                         tags=rule.tags,
                         evidence=[{
                             "type": "regex_match",

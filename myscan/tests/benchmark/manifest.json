@@ -1,0 +1,17 @@
+{
+  "vulnerable": [
+    {"file": "vulnerable/app.py", "rule_id": "SEC001", "line": 11},
+    {"file": "vulnerable/app.py", "rule_id": "SEC002", "line": 17},
+    {"file": "vulnerable/app.py", "rule_id": "SEC003", "line": 40},
+    {"file": "vulnerable/app.py", "rule_id": "SEC006", "line": 23},
+    {"file": "vulnerable/app.py", "rule_id": "SEC006", "line": 27},
+    {"file": "vulnerable/app.py", "rule_id": "SEC_GENERIC_API_KEY", "line": 30},
+    {"file": "vulnerable/app.py", "rule_id": "SEC_PASSWORD_ASSIGNMENT", "line": 31},
+    {"file": "vulnerable/secrets.py", "rule_id": "SEC_OPENAI_KEY", "line": 3},
+    {"file": "vulnerable/secrets.py", "rule_id": "SEC_GITHUB_TOKEN", "line": 4},
+    {"file": "vulnerable/secrets.py", "rule_id": "SEC_CLOUD_DB_URL_CREDS", "line": 5}
+  ],
+  "clean": [
+    "clean/app.py"
+  ]
+}

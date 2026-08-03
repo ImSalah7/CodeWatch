@@ -9,7 +9,7 @@ class TestSecretsScanner:
         self.scanner = SecretsScanner()
 
     def test_aws_key(self):
-        code = 'AWS_KEY = "AKIAIOSFODNN7EXAMPLE"'
+        code = 'AWS_KEY = "AKIA2X7KQ4N5B8VZ6C2D"'
         findings = self.scanner.scan_file(code, "config.py", Language.PYTHON)
         aws_findings = [f for f in findings if "AWS" in f.title]
         assert len(aws_findings) >= 1
@@ -62,3 +62,144 @@ class TestSecretsScanner:
         findings = self.scanner.scan_file(code, "config.py", Language.PYTHON)
         entropy_findings = [f for f in findings if "Entropy" in f.title or "entropy" in f.title.lower()]
         assert len(entropy_findings) >= 1
+
+    def test_openai_key(self):
+        code = 'OPENAI_KEY = "sk-proj-AbCdEfGhIjKlMnOpQrStUvWxYz0123456789_AbCdEfGhI"'
+        findings = self.scanner.scan_file(code, "config.py", Language.PYTHON)
+        assert len([f for f in findings if "OpenAI" in f.title]) >= 1
+
+    def test_anthropic_key(self):
+        code = 'ANTHROPIC_KEY = "sk-ant-api03-AbCdEfGhIjKlMnOpQrStUvWxYz0123456789ABCDEF"'
+        findings = self.scanner.scan_file(code, "config.py", Language.PYTHON)
+        assert len([f for f in findings if "Anthropic" in f.title]) >= 1
+
+    def test_gitlab_token(self):
+        code = 'GITLAB_TOKEN = "glpat-AbCdEfGhIjKlMnOpQrStUvWxYz"'
+        findings = self.scanner.scan_file(code, "config.py", Language.PYTHON)
+        assert len([f for f in findings if "GitLab" in f.title]) >= 1
+
+    def test_github_fine_grained(self):
+        code = 'TOKEN = "github_pat_11AABCDEFGabcdefghijklmnopqrstuvwxyz"'
+        findings = self.scanner.scan_file(code, "config.py", Language.PYTHON)
+        assert len([f for f in findings if "Fine-Grained" in f.title]) >= 1
+
+    def test_huggingface_token(self):
+        code = 'HF_TOKEN = "hf_ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghij"'
+        findings = self.scanner.scan_file(code, "config.py", Language.PYTHON)
+        assert len([f for f in findings if "Hugging Face" in f.title]) >= 1
+
+    def test_azure_account_key(self):
+        code = 'AccountKey="M0xY1a2b3c4d5e6f7g8h9i0j1k2l3m4n5o6p7q8r9s0t1u2v3w4x5y6z7a8b9c0d1e2f3g4h5i6=="'
+        findings = self.scanner.scan_file(code, "config.py", Language.PYTHON)
+        assert len([f for f in findings if "Azure" in f.title]) >= 1
+
+    def test_db_credentials_in_url(self):
+        code = 'DATABASE_URL = "postgres://admin:Sup3rSecret!@db.internal:5432/app"'
+        findings = self.scanner.scan_file(code, "config.py", Language.PYTHON)
+        assert len([f for f in findings if "Credentials in URL" in f.title]) >= 1
+
+    def test_keyboard_walk_is_not_reported(self):
+        code = 'API_KEY = "qwertyuiopasdfghjklzxcvbnm1234567890"'
+        findings = self.scanner.scan_file(code, "config.py", Language.PYTHON)
+        for f in findings:
+            assert f.confidence < 0.5
+
+    def test_repeated_char_value_is_weak(self):
+        code = 'password = "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"'
+        findings = self.scanner.scan_file(code, "auth.py", Language.PYTHON)
+        for f in findings:
+            assert f.confidence < 0.5
+
+    def test_self_referential_value_is_weak(self):
+        code = 'api_key = "api_key"'
+        findings = self.scanner.scan_file(code, "config.py", Language.PYTHON)
+        for f in findings:
+            assert f.confidence < 0.5
+
+    def test_url_not_flagged_as_high_entropy(self):
+        code = 'URL = "https://cdn.example.com/assets/AbCdEfGhIjKlMnOpQrStUvWxYz0123456789.js"'
+        findings = self.scanner.scan_file(code, "config.py", Language.PYTHON)
+        entropy_findings = [f for f in findings if "Entropy" in f.title]
+        assert len(entropy_findings) == 0
+
+
+class TestSecretFalsePositiveRejection:
+    """Precision guardrails: values that look like secrets but are not real
+    credentials must produce zero findings."""
+
+    def setup_method(self):
+        self.scanner = SecretsScanner()
+
+    def assert_no_findings(self, content: str):
+        findings = self.scanner.scan_file(content, "config.py", Language.PYTHON)
+        assert findings == [], f"expected no findings, got {[f.rule_id for f in findings]}"
+
+    def test_openai_prefix_in_unrelated_identifier(self):
+        self.assert_no_findings('def _sk_live_metric(): return 1')
+
+    def test_twilio_prefix_without_secret_variable(self):
+        self.assert_no_findings(
+            'build_id = "SK7f8e9d0c1b2a3f4e5d6c7b8a9f0e1d2c3b4a5f6e"'
+        )
+
+    def test_prose_generic_api_key(self):
+        self.assert_no_findings('api_key = "the_application_environment_variable"')
+
+    def test_weak_passwords(self):
+        self.assert_no_findings('password = "qwerty123"')
+        self.assert_no_findings('password = "hello123"')
+        self.assert_no_findings('password = "admin123"')
+        self.assert_no_findings('password = "password"')
+
+    def test_uniform_charset_value(self):
+        self.assert_no_findings('password = "abcdefghijklmnopqrstuvwxyz"')
+
+    def test_sqlite_url_without_credentials(self):
+        self.assert_no_findings('DATABASE_URL = "sqlite:///app.db"')
+
+    def test_benign_high_entropy_value(self):
+        self.assert_no_findings(
+            'schema_hash = "9f8e7d6c5b4a3z2y1x0w8F7s6G5h4J3k2L1m0N9p8Q"'
+        )
+
+    def test_aws_example_keys_rejected(self):
+        self.assert_no_findings('AWS_ACCESS_KEY_ID = "AKIAIOSFODNN7EXAMPLE"')
+        self.assert_no_findings(
+            'AWS_SECRET_ACCESS_KEY = "wJalrXUtnFEMI/K7MDENG/bPxRfiCYEXAMPLEKEY"'
+        )
+
+
+class TestGenuineSecretPreservation:
+    """Real credential formats must still be detected despite the FP guardrails."""
+
+    def setup_method(self):
+        self.scanner = SecretsScanner()
+
+    def test_sendgrid_key(self):
+        code = (
+            'SENDGRID_API_KEY = '
+            '"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"'
+        )
+        findings = [f for f in self.scanner.scan_file(code, "config.py", Language.PYTHON)
+                    if "SendGrid" in f.title]
+        assert len(findings) >= 1
+
+    def test_pem_private_key_block(self):
+        code = (
+            "-----BEGIN RSA PRIVATE KEY-----\n"
+            "MIIEowIBAAKCAQEA9f8e7d6c5b4a3z2y1x0w8F7s6G5h4J3k\n"
+            "-----END RSA PRIVATE KEY-----"
+        )
+        findings = [f for f in self.scanner.scan_file(code, "key.pem", Language.UNKNOWN)
+                    if "Private Key" in f.title]
+        assert len(findings) >= 1
+
+    def test_jwt(self):
+        code = (
+            'JWT = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.'
+            'eyJzdWIiOiIxMjM0NTY3ODkwIn0.'
+            '9f8e7d6c5b4a3z2y1x0w8F7s6G5h4J3k"'
+        )
+        findings = [f for f in self.scanner.scan_file(code, "config.py", Language.PYTHON)
+                    if "JWT" in f.title or "Token" in f.title]
+        assert len(findings) >= 1

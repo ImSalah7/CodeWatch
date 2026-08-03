@@ -7,6 +7,8 @@ import re
 from collections import Counter
 
 from ..core.models import CodeLocation, Finding, FindingCategory, Language, Severity
+from ..core.secret_signals import score_secret, secret_rule_kind
+from ..core.validation_engine import is_weak_credential_value
 from ..scanners import BaseScanner
 
 SECRET_PATTERNS: list[tuple[str, str, str, Severity, float, str, str]] = [
@@ -30,6 +32,15 @@ SECRET_PATTERNS: list[tuple[str, str, str, Severity, float, str, str]] = [
     ("sendgrid_key", r"SG\.[A-Za-z0-9\-_]{22}\.[A-Za-z0-9\-_]{43}", "SendGrid API Key", Severity.CRITICAL, 0.95, "CWE-798", "Use environment variables."),
     ("twilio_key", r"SK[a-f0-9]{32}", "Twilio API Key", Severity.HIGH, 0.9, "CWE-798", "Use environment variables."),
     ("telegram_token", r"\d{8,10}:[A-Za-z0-9_-]{35}", "Telegram Bot Token", Severity.HIGH, 0.85, "CWE-798", "Use environment variables."),
+    ("github_fine_grained", r"github_pat_[A-Za-z0-9_]{22,}", "GitHub Fine-Grained Token", Severity.CRITICAL, 0.95, "CWE-798", "Use GitHub Actions secrets or short-lived tokens."),
+    ("gitlab_token", r"glpat-[A-Za-z0-9_\-]{20,}", "GitLab Personal Access Token", Severity.CRITICAL, 0.9, "CWE-798", "Use GitLab CI/CD variables."),
+    ("openai_key", r"sk-(?:proj-)?[A-Za-z0-9_\-]{32,}", "OpenAI API Key", Severity.HIGH, 0.85, "CWE-798", "Use a secrets manager and rotate keys."),
+    ("anthropic_key", r"sk-ant-[A-Za-z0-9_\-]{30,}", "Anthropic API Key", Severity.HIGH, 0.9, "CWE-798", "Use environment variables for API keys."),
+    ("huggingface_token", r"hf_[A-Za-z0-9]{34}", "Hugging Face Token", Severity.HIGH, 0.9, "CWE-798", "Use environment variables."),
+    ("pypi_token", r"pypi-[A-Za-z0-9_\-]{30,}", "PyPI Token", Severity.HIGH, 0.85, "CWE-798", "Use trusted publishing or environment variables."),
+    ("stripe_restricted_key", r"rk_live_[0-9a-zA-Z]{24,}", "Stripe Restricted Key", Severity.CRITICAL, 0.95, "CWE-798", "Use Stripe environment variables."),
+    ("azure_account_key", r"(?i)accountkey\s*[=:]\s*['\"]?[A-Za-z0-9+/=]{40,}", "Azure Storage Account Key", Severity.HIGH, 0.85, "CWE-798", "Use managed identities and short-lived SAS tokens."),
+    ("cloud_db_url_creds", r"(?:mysql|postgres(?:ql)?|mongodb(?:\+srv)?|redis)://[^\s:'\"]+:[^\s@'\"]+@", "Database Credentials in URL", Severity.HIGH, 0.85, "CWE-798", "Never embed credentials in connection URLs."),
 ]
 
 NOT_LITERAL_PATTERNS = [
@@ -111,6 +122,19 @@ def _is_non_literal_rhs(rhs: str) -> bool:
     return bool(re.match(r'^[a-zA-Z_][a-zA-Z0-9_.]*$', stripped))
 
 
+def _extract_variable_name(line: str) -> str:
+    """Extract the variable / dict-key name from an assignment snippet.
+
+    Handles `NAME = ...`, `obj.name = ...`, `"name": ...`, `NAME=...`.
+    """
+    match = re.match(r'\s*[\w.\'"\[\]]+\s*[=:]', line)
+    if not match:
+        return ""
+    name = match.group(0).strip().rstrip("=:").strip()
+    name = name.strip("'\"[]")
+    return name.rsplit(".", 1)[-1].rsplit("[", 1)[-1].strip()
+
+
 def _classify_password_secret(variable_name: str, value: str) -> str:
     """Sub-classify password-type secrets based on variable name and value context."""
     lower_name = variable_name.lower()
@@ -176,6 +200,15 @@ SECRET_CLASSIFICATIONS: dict[str, tuple[str, str, str]] = {
     "sendgrid_key": ("SendGrid API Key", "api_key", "SendGrid"),
     "twilio_key": ("Twilio API Key", "api_key", "Twilio"),
     "telegram_token": ("Telegram Bot Token", "api_token", "Telegram"),
+    "github_fine_grained": ("GitHub Fine-Grained Token", "api_token", "GitHub"),
+    "gitlab_token": ("GitLab Personal Access Token", "api_token", "GitLab"),
+    "openai_key": ("OpenAI API Key", "api_key", "OpenAI"),
+    "anthropic_key": ("Anthropic API Key", "api_key", "Anthropic"),
+    "huggingface_token": ("Hugging Face Token", "api_token", "Hugging Face"),
+    "pypi_token": ("PyPI Token", "api_token", "PyPI"),
+    "stripe_restricted_key": ("Stripe Restricted Key", "payment_key", "Stripe"),
+    "azure_account_key": ("Azure Storage Account Key", "cloud_credential", "Azure"),
+    "cloud_db_url_creds": ("Database Credentials in URL", "connection_string", "Database"),
     "high_entropy": ("High-Entropy String", "potential_secret", "Generic"),
 }
 
@@ -210,9 +243,25 @@ class SecretsScanner(BaseScanner):
                     raw = self._extract_password_value(line)
                     snippet = line.strip()
                 else:
-                    snippet = raw
+                    raw = self._extract_matched_value(raw)
+                    snippet = line.strip()
                 classification = self._classify_finding(secret_type, line)
-                adjusted_confidence = self._adjust_confidence(confidence, line)
+
+                # Multi-signal gate: only report secrets with corroborating
+                # signals (assignment context, variable-name hint, entropy,
+                # mixed charset, or an unambiguous secret format).
+                variable_name = _extract_variable_name(line)
+                rule_kind = secret_rule_kind(secret_type)
+                validation_checks: list[str] = []
+                if rule_kind:
+                    signal_score = score_secret(rule_kind, raw, variable_name, is_literal=True)
+                    if not signal_score.reported:
+                        continue
+                    adjusted_confidence = signal_score.confidence
+                    validation_checks = list(signal_score.checks)
+                else:
+                    adjusted_confidence = self._adjust_confidence(confidence, line)
+
                 findings.append(Finding(
                     rule_id=f"SEC_{secret_type.upper()}",
                     title=classification,
@@ -230,6 +279,8 @@ class SecretsScanner(BaseScanner):
                     fix_suggestion=fix,
                     tags=["secret", secret_type],
                     raw_secret=raw,
+                    matched_pattern=pattern,
+                    validation_checks=validation_checks,
                 ))
 
         findings.extend(self._check_high_entropy_strings(lines, file_path, language))
@@ -281,6 +332,11 @@ class SecretsScanner(BaseScanner):
         val_match = re.search(r'[=:]\s*[\'"]([^\'"]+)[\'"]', stripped)
         if val_match:
             val = val_match.group(1)
+            var_match = re.match(r'(?i)\s*(\w+)\s*[=:]', stripped)
+            if var_match and var_match.group(1).lower() == val.lower():
+                return base * 0.05
+            if is_weak_credential_value(val):
+                return base * 0.05
             if val.lower() in LDAP_FLAGS:
                 return base * 0.1
             if val.lower() in ("true", "false", "1", "0", "yes", "no", "none", "null", "empty", "undefined"):
@@ -294,6 +350,12 @@ class SecretsScanner(BaseScanner):
             return base * 0.5
 
         return base
+
+    def _extract_matched_value(self, raw: str) -> str:
+        """Extract just the credential value when the regex match includes
+        a leading `key = ...` prefix (e.g. generic_api_key patterns)."""
+        m = re.search(r'[=:]\s*[\'"]?([^\'"\s]+)', raw)
+        return m.group(1) if m else raw
 
     def _extract_password_value(self, line: str) -> str:
         """Extract the actual password value from the assignment line."""
@@ -326,6 +388,12 @@ class SecretsScanner(BaseScanner):
             else:
                 matches = re.findall(r'["\']([A-Za-z0-9+/=\-_]{32,80})["\']', line)
                 for match in matches:
+                    if "://" in match or "\\" in match:
+                        continue
+                    if re.search(r"@[a-z0-9.-]+\.[a-z]{2,}", match, re.IGNORECASE):
+                        continue
+                    if is_weak_credential_value(match):
+                        continue
                     entropy = self._entropy(match)
                     if (
                         entropy > 4.5
@@ -336,12 +404,21 @@ class SecretsScanner(BaseScanner):
                         and any(c in match for c in "0123456789")
                         and match != match[::-1]
                     ):
+                        # Multi-signal gate: high entropy alone is not enough.
+                        # The value must be assigned to a secret-hinting name or
+                        # match a known secret format.
+                        variable_name = _extract_variable_name(line)
+                        signal_score = score_secret(
+                            "high_entropy", match, variable_name, is_literal=True
+                        )
+                        if not signal_score.reported:
+                            continue
                         findings.append(Finding(
                             rule_id="SEC_HIGH_ENTROPY",
                             title="High-Entropy String",
                             description=f"String has entropy {entropy:.1f}/8.0, may be a secret.",
                             severity=Severity.MEDIUM,
-                            confidence=min(entropy / 8.0, 0.7),
+                            confidence=signal_score.confidence,
                             category=FindingCategory.SECRET,
                             language=lang,
                             location=CodeLocation(file_path=file_path, line=i, code_snippet=line.strip()),
@@ -349,6 +426,8 @@ class SecretsScanner(BaseScanner):
                             fix_suggestion="Verify if this is a secret. If so, move to environment variables.",
                             tags=["secret", "entropy"],
                             raw_secret=match,
+                            matched_pattern=r"['\"][A-Za-z0-9+/=\-_]{32,80}['\"] (entropy > 4.5)",
+                            validation_checks=list(signal_score.checks),
                         ))
                         break
         return findings

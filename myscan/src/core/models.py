@@ -194,6 +194,11 @@ class Finding:
     occurrences: int = 1
     locations: list[dict] = field(default_factory=list)
     state: dict = field(default_factory=dict)
+    verification_level: str = "unverified"
+    matched_pattern: str = ""
+    likely_false_positive: bool = False
+    likely_false_positive_reason: str = ""
+    validation_checks: list[str] = field(default_factory=list)
 
     def __post_init__(self):
         if not self.fingerprint:
@@ -251,6 +256,11 @@ class Finding:
             "occurrences": self.occurrences,
             "locations": self.locations,
             "state": self.state,
+            "verification_level": self.verification_level,
+            "matched_pattern": self.matched_pattern,
+            "likely_false_positive": self.likely_false_positive,
+            "likely_false_positive_reason": self.likely_false_positive_reason,
+            "validation_checks": self.validation_checks,
             "reachability": getattr(self, "reachability", ""),
             "root_cause": getattr(self, "root_cause", ""),
         }
@@ -393,12 +403,26 @@ class ScanResult:
             result = validation_pipeline.validate_finding(finding_dict)
             if result is not None:
                 f.confidence = result.get("confidence", f.confidence)
+                verification_level = result.get("verification_level", "unverified")
+                f.verification_level = verification_level
+                f.likely_false_positive = bool(result.get("likely_false_positive", False))
+                f.likely_false_positive_reason = result.get("likely_false_positive_reason", "") or ""
                 if hasattr(f, 'validation_level'):
-                    f.validation_level = result.get("verification_level", "")
+                    f.validation_level = verification_level
+                evidence_dict = result.get("evidence")
+                if evidence_dict:
+                    f.evidence = [evidence_dict]
                 validated.append(f)
             else:
                 rejected += 1
         self.findings = validated
+
+    def apply_severity_gates(self):
+        """Demote HIGH/CRITICAL findings that lack strong evidence or confidence."""
+        from ..core.severity_gate import apply_severity_gate
+
+        for f in self.findings:
+            apply_severity_gate(f)
 
     def to_dict(self) -> dict[str, Any]:
         return {
