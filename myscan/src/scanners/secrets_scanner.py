@@ -451,12 +451,11 @@ class SecretsScanner(BaseScanner):
         if not eq_match:
             return line.strip()
         rhs = line[eq_match.end():].strip()
-        if (rhs.startswith('"') and rhs.endswith('"')) or (rhs.startswith("'") and rhs.endswith("'")):
-            return rhs[1:-1]
-        if rhs.startswith("(") and rhs.endswith(")"):
-            inner = rhs[1:-1].strip()
-            if (inner.startswith('"') and inner.endswith('"')) or (inner.startswith("'") and inner.endswith("'")):
-                return inner[1:-1]
+        # Take the quoted literal right after `=`, ignoring a trailing inline
+        # comment (e.g. `password = "secret"  # prod`) or wrapping parens.
+        m = re.match(r'\(?\s*[\'"]([^\'"]+)[\'"]', rhs)
+        if m:
+            return m.group(1)
         return rhs.split()[0] if rhs.split() else rhs
 
     def _mask_secret(self, secret: str) -> str:

@@ -64,6 +64,33 @@ class TestPlaceholderCredentialsNotReported:
         findings = _engine({"a.py": 'api_key = "your-api-key-here"\npassword = "changeme"\n'})
         assert not _rules(findings, "SEC017", "SEC_PASSWORD_ASSIGNMENT", "SEC_GENERIC_API_KEY")
 
+    def test_space_separated_placeholder_phrases_rejected(self):
+        findings = _engine({"a.py": (
+            'token = "your token here"\n'
+            'secret = "put your secret here"\n'
+            'password = "enter password here"\n'
+            'api_key = "type your key"\n'
+        )})
+        assert not _rules(findings, "SEC017", "SEC_PASSWORD_ASSIGNMENT", "SEC_GENERIC_API_KEY")
+
+    def test_demo_allcaps_placeholders_rejected(self):
+        findings = _engine({"a.py": 'API_KEY = "YOUR_API_KEY"\nPASSWORD = "YOUR_PASSWORD"\n'})
+        assert not _rules(findings, "SEC017", "SEC_PASSWORD_ASSIGNMENT", "SEC_GENERIC_API_KEY")
+
+    def test_js_declarations_placeholder_rejected(self):
+        findings = _engine({"app.js": (
+            "const API_KEY = 'sk_live_1234'; // short sample\n"
+            "const password = 'password';\n"
+            "const secret = 'abcdefgh'; // uniform lowercase\n"
+        )})
+        assert not _rules(findings, "SEC017", "SEC_PASSWORD_ASSIGNMENT", "SEC_GENERIC_API_KEY")
+
+    def test_inline_comment_value_survives(self):
+        findings = _engine({"a.py": 'password = "P@ssw#ord!2024"  # production db\n'})
+        assert any(f.rule_id == "SEC_PASSWORD_ASSIGNMENT" for f in findings)
+        pw = [f for f in findings if f.rule_id == "SEC_PASSWORD_ASSIGNMENT"]
+        assert pw and pw[0].raw_secret == "P@ssw#ord!2024"
+
 
 class TestRealSecretsStillReported:
     def test_strong_password_survives(self):
@@ -77,6 +104,10 @@ class TestRealSecretsStillReported:
     def test_real_aws_key_survives(self):
         findings = _engine({"creds.py": 'AWS_ACCESS_KEY_ID = "AKIA2EPBN2U4Z3FQRXDF"\n'})
         assert any(f.rule_id == "SEC_AWS_ACCESS_KEY" for f in findings)
+
+    def test_real_db_url_survives(self):
+        findings = _engine({"creds.py": 'DB_URL = "postgresql://appuser:S3cr3t!Pa55w0rd@prod-db.internal:5432/app"\n'})
+        assert any(f.rule_id == "SEC_CLOUD_DB_URL_CREDS" for f in findings)
 
 
 class TestXssStaticVsDynamic:

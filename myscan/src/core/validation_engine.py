@@ -716,8 +716,8 @@ class ValidationPipeline:
                 )
                 return "value_too_short"
 
-            var_match = re.match(r"\s*(\w+)\s*[=:]", code_snippet)
-            if var_match and var_match.group(1).lower() == stripped.lower():
+            var_match = _extract_assignment_varname(code_snippet)
+            if var_match and var_match.lower() == stripped.lower():
                 negative_evidences.append(
                     self.evidence_engine.create_negative_evidence(
                         signal="self_referential",
@@ -751,8 +751,8 @@ class ValidationPipeline:
             # match. Values that are prose, uniform charset, common words, or
             # credential-less DB URLs are rejected here even if the scanner was
             # lenient.
-            variable_match = re.match(r"\s*(\w+)\s*[=:]", code_snippet)
-            varname = variable_match.group(1) if variable_match else ""
+            variable_match = _extract_assignment_varname(code_snippet)
+            varname = variable_match or ""
             if rule_kind is None:
                 # Generic rules (e.g. SEC017 hardcoded password/secret) do not
                 # map to a rule kind; infer one from the variable name so the
@@ -1089,6 +1089,20 @@ def _variable_matches_snippet(variable: str, snippet: str) -> bool:
     return variable in snippet
 
 
+def _extract_assignment_varname(code_snippet: str) -> str:
+    """Return the identifier that is assigned a quoted value.
+
+    Unlike an anchored match (which would grab ``const``/``let``/``var`` in
+    ``const secret = "..."``), this finds the assignment target directly in
+    front of the quoted literal, so rule-kind inference sees the real
+    variable name in JS/TS declarations.
+    """
+    if not code_snippet:
+        return ""
+    m = re.search(r"(\w+)\s*=\s*[\"']", code_snippet)
+    return m.group(1) if m else ""
+
+
 def _extract_rhs_value(code_snippet: str) -> str | None:
     """Extract the right-hand side value from an assignment snippet.
 
@@ -1110,19 +1124,59 @@ def _extract_rhs_value(code_snippet: str) -> str | None:
 
 def _clean_secret_value(raw: str) -> str:
     """Extract the raw secret body from a value that may carry quotes, a
-    trailing statement separator, or wrapping parentheses.
+    trailing statement separator, an inline comment, or wrapping parentheses.
 
     ``_extract_rhs_value`` returns the literal text after ``=``, which keeps
-    syntax such as ``"secret";`` or ``("secret")``. Before applying the
-    placeholder / weak-value / signal gates we need the bare value.
+    syntax such as ``"secret";``, ``("secret")``, or ``'secret'; // note``.
+    Before applying the placeholder / weak-value / signal gates we need the
+    bare value.
     """
     v = (raw or "").strip()
+    v = _strip_inline_comment(v)
     v = v.rstrip(";,").strip()
     if v.startswith("(") and v.endswith(")"):
         v = v[1:-1].strip()
     if (v.startswith('"') and v.endswith('"')) or (v.startswith("'") and v.endswith("'")):
         v = v[1:-1]
     return v.strip()
+
+
+def _strip_inline_comment(value: str) -> str:
+    """Remove a trailing ``//`` / ``#`` / ``/* */`` comment that follows a
+    quoted literal (e.g. ``'abc123' // demo`` or ``'abc123'; # note``).
+
+    Anything inside the quotes is preserved (passwords may contain ``#``), and
+    values without a quoted literal - already-unquoted raw secrets, URL schemes
+    like ``postgresql://...`` - are returned unchanged.
+    """
+    quote: str | None = None
+    last_quote_end = -1
+    i = 0
+    while i < len(value):
+        c = value[i]
+        if quote:
+            if c == quote:
+                quote = None
+                last_quote_end = i
+            i += 1
+            continue
+        if c in ("'", '"'):
+            quote = c
+            i += 1
+            continue
+        i += 1
+    if last_quote_end < 0:
+        return value
+    j = last_quote_end + 1
+    while j < len(value):
+        c = value[j]
+        if c.isspace() or c in ";,":
+            j += 1
+            continue
+        if value.startswith("//", j) or value.startswith("/*", j) or c == "#":
+            return value[:j].rstrip()
+        break
+    return value
 
 
 def _looks_like_variable_reference(value: str) -> bool:
