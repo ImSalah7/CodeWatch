@@ -1,7 +1,21 @@
 """Tests for secrets scanner."""
 
+import tempfile
+from pathlib import Path
+
+from src.core.config import ScanConfig
+from src.core.engine import ScanEngine
 from src.core.models import FindingCategory, Language
 from src.scanners.secrets_scanner import SecretsScanner
+
+
+def _engine_findings(files: dict[str, str]) -> list:
+    with tempfile.TemporaryDirectory() as td:
+        root = Path(td)
+        for name, content in files.items():
+            (root / name).write_text(content)
+        cfg = ScanConfig(include_tests=True, include_docs=True, include_examples=True)
+        return ScanEngine(cfg).scan(str(root)).findings
 
 
 class TestSecretsScanner:
@@ -22,7 +36,11 @@ class TestSecretsScanner:
         assert len(gh_findings) >= 1
 
     def test_private_key(self):
-        code = '-----BEGIN RSA PRIVATE KEY-----'
+        code = (
+            "-----BEGIN RSA PRIVATE KEY-----\n"
+            "MIIEowIBAAKCAQEA9f8e7d6c5b4a3z2y1x0w8F7s6G5h4J3k\n"
+            "-----END RSA PRIVATE KEY-----"
+        )
         findings = self.scanner.scan_file(code, "key.pem", Language.UNKNOWN)
         key_findings = [f for f in findings if "Private Key" in f.title]
         assert len(key_findings) >= 1
@@ -168,6 +186,22 @@ class TestSecretFalsePositiveRejection:
             'AWS_SECRET_ACCESS_KEY = "wJalrXUtnFEMI/K7MDENG/bPxRfiCYEXAMPLEKEY"'
         )
 
+    def test_unsigned_jwt_rejected(self):
+        self.assert_no_findings(
+            'jwt = "eyJhbGciOiJub25lIn0.eyJzdWIiOiIxMjM0In0.aaa"'
+        )
+
+    def test_bare_pem_header_rejected(self):
+        self.assert_no_findings("-----BEGIN RSA PRIVATE KEY-----")
+
+    def test_known_format_on_non_secret_identifier_rejected(self):
+        self.assert_no_findings(
+            'trace_id = "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"'
+        )
+        self.assert_no_findings(
+            'build_id = "AIzaSyA-abcdefghijklmnopqrstuvwxyz01234567"'
+        )
+
 
 class TestGenuineSecretPreservation:
     """Real credential formats must still be detected despite the FP guardrails."""
@@ -203,3 +237,65 @@ class TestGenuineSecretPreservation:
         findings = [f for f in self.scanner.scan_file(code, "config.py", Language.PYTHON)
                     if "JWT" in f.title or "Token" in f.title]
         assert len(findings) >= 1
+
+    def test_anthropic_key_not_misattributed_to_openai(self):
+        code = 'ANTHROPIC_KEY = "sk-ant-9f8e7d6c5b4a3z2y1x0w8F7s6G5h4J3kQ2wE4r5t6y7u8i"'
+        findings = self.scanner.scan_file(code, "config.py", Language.PYTHON)
+        assert [f for f in findings if f.rule_id == "SEC_OPENAI_KEY"] == []
+        assert len([f for f in findings if f.rule_id == "SEC_ANTHROPIC_KEY"]) >= 1
+
+    def test_single_finding_per_credential(self):
+        code = (
+            'SENDGRID_API_KEY = '
+            '"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"'
+        )
+        findings = self.scanner.scan_file(code, "config.py", Language.PYTHON)
+        assert len(findings) == 1
+        assert findings[0].rule_id == "SEC_SENDGRID_KEY"
+
+    def test_aws_secret_key_value_not_truncated(self):
+        code = (
+            'AWS_SECRET_ACCESS_KEY = "wJalrXUtnFEMIK7MDENGbPxRfiCYzK9xQ2V3mN8pL0"'
+        )
+        findings = self.scanner.scan_file(code, "config.py", Language.PYTHON)
+        aws = [f for f in findings if f.rule_id == "SEC_AWS_SECRET_KEY"]
+        assert len(aws) >= 1
+        assert aws[0].raw_secret == "wJalrXUtnFEMIK7MDENGbPxRfiCYzK9xQ2V3mN8pL0"
+        assert len(aws[0].raw_secret) == 42
+
+
+class TestEngineLevelValidation:
+    """End-to-end checks that real secrets survive the validation pipeline and
+    placeholders are rejected, including via the legacy SEC01x rules."""
+
+    def test_pem_private_key_survives_pipeline(self):
+        findings = _engine_findings({
+            "key.pem": (
+                "-----BEGIN RSA PRIVATE KEY-----\n"
+                "MIIEowIBAAKCAQEA9f8e7d6c5b4a3z2y1x0w8F7s6G5h4J3k\n"
+                "-----END RSA PRIVATE KEY-----\n"
+            ),
+        })
+        assert any(f.rule_id == "SEC_PRIVATE_KEY_HEADER" for f in findings)
+
+    def test_bare_pem_header_rejected_at_engine_level(self):
+        findings = _engine_findings({"key.pem": "-----BEGIN RSA PRIVATE KEY-----\n"})
+        assert not [f for f in findings if f.rule_id == "SEC_PRIVATE_KEY_HEADER"]
+
+    def test_placeholder_api_key_rejected_at_engine_level(self):
+        findings = _engine_findings({
+            "placeholder.py": 'api_key = "your-api-key-here"\npassword = "changeme"\n',
+        })
+        assert not [f for f in findings if f.rule_id in ("SEC017", "SEC_PASSWORD_ASSIGNMENT")]
+
+    def test_real_password_preserved_at_engine_level(self):
+        findings = _engine_findings({"auth.py": 'password = "P@ssw0rd!XyZz99"\n'})
+        assert any(f.rule_id == "SEC_PASSWORD_ASSIGNMENT" for f in findings)
+
+    def test_real_aws_key_found_at_engine_level(self):
+        findings = _engine_findings({"creds.py": 'AWS_ACCESS_KEY_ID = "AKIA2EPBN2U4Z3FQRXDF"\n'})
+        assert any(f.rule_id == "SEC_AWS_ACCESS_KEY" for f in findings)
+
+    def test_documented_example_aws_key_rejected(self):
+        findings = _engine_findings({"creds.py": 'AWS_ACCESS_KEY_ID = "AKIAIOSFODNN7EXAMPLE"\n'})
+        assert not [f for f in findings if f.rule_id in ("SEC_AWS_ACCESS_KEY", "SEC043")]

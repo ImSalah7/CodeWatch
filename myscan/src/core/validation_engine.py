@@ -144,7 +144,12 @@ class ValidationPipeline:
         )
 
         # Stage 6: Secret-Specific Validation
-        if category == "SECRET" or rule_id.startswith("SEC_"):
+        is_secret_finding = (
+            category == "SECRET"
+            or rule_id.startswith("SEC_")
+            or "credentials" in (finding.get("tags") or [])
+        )
+        if is_secret_finding:
             secret_rejection = self._validate_secret(
                 finding, file_content, positive_evidences, negative_evidences
             )
@@ -725,7 +730,11 @@ class ValidationPipeline:
                 )
                 return "self_referential_value"
 
-            if is_weak_credential_value(stripped):
+            rule_kind = secret_rule_kind(rule_id)
+            if rule_kind is None and ("://" in stripped or "://" in raw_secret):
+                rule_kind = "db_url"
+
+            if is_weak_credential_value(stripped) and rule_kind not in ("private_key", "jwt", "strong_format"):
                 negative_evidences.append(
                     self.evidence_engine.create_negative_evidence(
                         signal="weak_value",
@@ -744,9 +753,15 @@ class ValidationPipeline:
             # lenient.
             variable_match = re.match(r"\s*(\w+)\s*[=:]", code_snippet)
             varname = variable_match.group(1) if variable_match else ""
-            rule_kind = secret_rule_kind(rule_id)
-            if rule_kind is None and ("://" in stripped or "://" in raw_secret):
-                rule_kind = "db_url"
+            if rule_kind is None:
+                # Generic rules (e.g. SEC017 hardcoded password/secret) do not
+                # map to a rule kind; infer one from the variable name so the
+                # multi-signal gate still filters placeholders and weak values.
+                vn = varname.lower()
+                if any(hint in vn for hint in ("password", "passwd", "pwd", "secret")):
+                    rule_kind = "password"
+                elif any(hint in vn for hint in ("api", "key", "token", "credential", "auth", "client")):
+                    rule_kind = "generic_key"
             if rule_kind:
                 signal_score = score_secret(rule_kind, stripped, varname, is_literal=True)
                 if not signal_score.reported:

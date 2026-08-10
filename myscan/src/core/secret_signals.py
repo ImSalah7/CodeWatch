@@ -19,6 +19,8 @@ variable name it is assigned to, so the heuristics stay testable in isolation.
 
 from __future__ import annotations
 
+import base64
+import json
 import re
 from collections import Counter
 from dataclasses import dataclass, field
@@ -337,6 +339,56 @@ def has_secret_varname_hint(variable_name: str) -> bool:
     return lower.startswith(("sk_", "ghp_", "gho_", "ghs_", "ghu_", "glpat_", "hf_", "npm_", "sk-ant-"))
 
 
+# Variable names that denote a non-credential artifact: identifiers, hashes,
+# runtime/request context, builds, or transport endpoints. A secret-format
+# value assigned to one of these (e.g. `trace_id`, `build_id`, `schema_hash`)
+# is unrelated to a real credential and must not be reported.
+_NON_SECRET_VARNAME_TOKENS: frozenset[str] = frozenset(
+    {
+        "id", "ids", "uid", "uuid", "guid", "serial", "number", "numbers",
+        "index", "idx", "name", "names", "slug", "ref", "reference",
+        "hash", "hashes", "sha", "sha1", "sha256", "sha512", "md5", "digest",
+        "checksum", "salt", "nonce", "iv", "seed",
+        "build", "version", "versions", "release", "tag", "tags", "commit",
+        "branch", "revision", "build_id", "trace_id",
+        "path", "route", "endpoint", "host", "hostname", "port", "url", "uri",
+        "domain", "zone", "region", "bucket", "queue", "topic", "channel",
+        "stream", "schema", "table", "column", "row", "cache", "memo", "memory", "storage", "store", "log", "logs", "trace",
+        "span", "request", "response", "session", "connection", "header",
+        "headers", "query", "params", "args", "body", "payload", "message",
+        "messages", "value", "val", "setting", "settings", "option",
+        "options", "flag", "flags", "mode", "type", "kind", "status", "state",
+        "data", "metadata", "info", "file", "files", "filename", "folder",
+        "directory", "timestamp", "time",
+    }
+)
+
+
+def has_non_secret_varname_hint(variable_name: str) -> bool:
+    """True when a variable name consists entirely of non-secret artifact
+    nouns (e.g. `trace_id`, `build_id`, `sha256_checksum`, `session_id`),
+    meaning an assigned secret-format value is unrelated context."""
+    if not variable_name:
+        return False
+    tokens = split_tokens(variable_name.lower())
+    return bool(tokens) and all(t in _NON_SECRET_VARNAME_TOKENS for t in tokens)
+
+
+def jwt_algorithm(value: str) -> str | None:
+    """Decode the `alg` claim from a JWT header segment, or None on failure."""
+    header = value.split(".", 1)[0] if value else ""
+    if not header:
+        return None
+    try:
+        padded = header + "=" * (-len(header) % 4)
+        data = base64.urlsafe_b64decode(padded.encode("ascii"))
+        parsed = json.loads(data.decode("utf-8", "replace"))
+    except (ValueError, UnicodeDecodeError):
+        return None
+    alg = parsed.get("alg")
+    return str(alg) if isinstance(alg, str) else None
+
+
 # ---------------------------------------------------------------------------
 # Known secret format prefixes.
 # ---------------------------------------------------------------------------
@@ -526,6 +578,13 @@ def score_secret(
     if rule_kind in ("generic_key", "password", "high_entropy") and is_common_word_value(v):
         return SecretSignalScore(reject_reason="value is a common word, not a credential")
 
+    # A vendor-format value assigned to a clearly non-secret identifier
+    # (e.g. `trace_id = "SG...."`, `build_id = "AIza..."`) is unrelated context.
+    if rule_kind in ("strong_format", "ambiguous_format") and has_non_secret_varname_hint(variable_name):
+        return SecretSignalScore(
+            reject_reason="value is assigned to a non-secret identifier (unrelated)"
+        )
+
     # --- Signal gathering. ------------------------------------------------
     ent = entropy(v)
     has_varname = bool(variable_name) and has_secret_varname_hint(variable_name)
@@ -538,6 +597,10 @@ def score_secret(
             _signal(checks, "format", "Matched a private key/certificate header")
             score.confidence = 0.92
         elif rule_kind == "jwt":
+            if (jwt_algorithm(v) or "").lower() == "none":
+                return SecretSignalScore(
+                    reject_reason="unsigned JWT (alg=none) is not a real credential"
+                )
             _signal(checks, "format", "Matched a three-segment JWT structure")
             score.confidence = 0.85
         else:

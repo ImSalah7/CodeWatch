@@ -13,13 +13,13 @@ from ..scanners import BaseScanner
 
 SECRET_PATTERNS: list[tuple[str, str, str, Severity, float, str, str]] = [
     ("aws_access_key", r"AKIA[0-9A-Z]{16}", "AWS Access Key ID", Severity.CRITICAL, 0.95, "CWE-798", "Use IAM roles or environment variables."),
-    ("aws_secret_key", r"(?i)aws_secret_access_key\s*[=:]\s*['\"]?[A-Za-z0-9/+=]{40}", "AWS Secret Access Key", Severity.CRITICAL, 0.95, "CWE-798", "Use IAM roles or environment variables."),
+    ("aws_secret_key", r"(?i)aws_secret_access_key\s*[=:]\s*['\"]?[A-Za-z0-9/+=]{40,}", "AWS Secret Access Key", Severity.CRITICAL, 0.95, "CWE-798", "Use IAM roles or environment variables."),
     ("github_token", r"ghp_[A-Za-z0-9]{36}", "GitHub Personal Access Token", Severity.CRITICAL, 0.95, "CWE-798", "Use GitHub Actions secrets."),
     ("github_oauth", r"gho_[A-Za-z0-9]{36}", "GitHub OAuth Token", Severity.CRITICAL, 0.95, "CWE-798", "Use GitHub Actions secrets."),
     ("github_app_token", r"(?:ghu|ghs)_[A-Za-z0-9]{36}", "GitHub App Token", Severity.CRITICAL, 0.9, "CWE-798", "Use GitHub App installation tokens."),
     ("slack_token", r"xox[bpoa]-[0-9]{10,13}-[a-zA-Z0-9-]+", "Slack Token", Severity.CRITICAL, 0.95, "CWE-798", "Use Slack app tokens with minimal scopes."),
     ("slack_webhook", r"https://hooks\.slack\.com/services/T[A-Z0-9]+/B[A-Z0-9]+/[a-zA-Z0-9]+", "Slack Webhook URL", Severity.HIGH, 0.9, "CWE-798", "Store webhook URLs in environment variables."),
-    ("google_api_key", r"AIza[0-9A-Za-z\-_]{35}", "Google API Key", Severity.HIGH, 0.9, "CWE-798", "Restrict API keys by IP and API."),
+    ("google_api_key", r"AIza[0-9A-Za-z\-_]{35,}", "Google API Key", Severity.HIGH, 0.9, "CWE-798", "Restrict API keys by IP and API."),
     ("stripe_key_live", r"sk_live_[0-9a-zA-Z]{24,}", "Stripe Live Secret Key", Severity.CRITICAL, 0.95, "CWE-798", "Use Stripe environment variables."),
     ("stripe_key_test", r"sk_test_[0-9a-zA-Z]{24,}", "Stripe Test Secret Key", Severity.MEDIUM, 0.7, "CWE-798", "Store test keys in environment variables."),
     ("heroku_api_key", r"(?i)heroku[_\s]*(?:api[_\s]*key)\s*[=:]\s*['\"]?[a-f0-9]{8}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{12}", "Heroku API Key", Severity.CRITICAL, 0.9, "CWE-798", "Use Heroku config vars."),
@@ -34,7 +34,7 @@ SECRET_PATTERNS: list[tuple[str, str, str, Severity, float, str, str]] = [
     ("telegram_token", r"\d{8,10}:[A-Za-z0-9_-]{35}", "Telegram Bot Token", Severity.HIGH, 0.85, "CWE-798", "Use environment variables."),
     ("github_fine_grained", r"github_pat_[A-Za-z0-9_]{22,}", "GitHub Fine-Grained Token", Severity.CRITICAL, 0.95, "CWE-798", "Use GitHub Actions secrets or short-lived tokens."),
     ("gitlab_token", r"glpat-[A-Za-z0-9_\-]{20,}", "GitLab Personal Access Token", Severity.CRITICAL, 0.9, "CWE-798", "Use GitLab CI/CD variables."),
-    ("openai_key", r"sk-(?:proj-)?[A-Za-z0-9_\-]{32,}", "OpenAI API Key", Severity.HIGH, 0.85, "CWE-798", "Use a secrets manager and rotate keys."),
+    ("openai_key", r"sk-(?!ant-)(?:proj-)?[A-Za-z0-9_\-]{32,}", "OpenAI API Key", Severity.HIGH, 0.85, "CWE-798", "Use a secrets manager and rotate keys."),
     ("anthropic_key", r"sk-ant-[A-Za-z0-9_\-]{30,}", "Anthropic API Key", Severity.HIGH, 0.9, "CWE-798", "Use environment variables for API keys."),
     ("huggingface_token", r"hf_[A-Za-z0-9]{34}", "Hugging Face Token", Severity.HIGH, 0.9, "CWE-798", "Use environment variables."),
     ("pypi_token", r"pypi-[A-Za-z0-9_\-]{30,}", "PyPI Token", Severity.HIGH, 0.85, "CWE-798", "Use trusted publishing or environment variables."),
@@ -237,6 +237,8 @@ class SecretsScanner(BaseScanner):
                 if not match:
                     continue
                 raw = match.group()
+                if secret_type == "private_key_header" and not self._has_complete_pem_block(lines, i - 1):
+                    continue
                 if secret_type == "password_assignment":
                     if not self._validate_password_line(line, raw):
                         continue
@@ -283,8 +285,42 @@ class SecretsScanner(BaseScanner):
                     validation_checks=validation_checks,
                 ))
 
-        findings.extend(self._check_high_entropy_strings(lines, file_path, language))
+        # A single credential must produce exactly one finding per (line, value):
+        # keep the highest-confidence rule attribution and drop weaker
+        # duplicates (e.g. a generic "Potential API Key" next to a specific
+        # vendor finding) so the critical section only shows one real finding.
+        seen: dict[tuple[int, str], Finding] = {}
+        for finding in findings:
+            key = (finding.location.line, finding.raw_secret)
+            prev = seen.get(key)
+            if prev is None or finding.confidence > prev.confidence:
+                seen[key] = finding
+        findings = list(seen.values())
+
+        findings.extend(
+            self._check_high_entropy_strings(
+                lines,
+                file_path,
+                language,
+                reported_raws={f.raw_secret for f in findings},
+            )
+        )
         return findings
+
+    def _has_complete_pem_block(self, lines: list[str], begin_idx: int) -> bool:
+        """A PEM private key header only counts when the block is complete:
+        a BEGIN header, at least one base64 body line, and an END marker.
+        A bare `-----BEGIN ... PRIVATE KEY-----` line is partial, not a key."""
+        end_re = re.compile(r"-----END (?:RSA |EC |DSA |OPENSSH )?PRIVATE KEY-----")
+        body_re = re.compile(r"^[A-Za-z0-9+/=]{16,}$")
+        window = lines[begin_idx:begin_idx + 200]
+        has_body = False
+        for line in window[1:]:
+            if end_re.search(line):
+                return has_body
+            if body_re.match(line.strip()):
+                has_body = True
+        return False
 
     def _validate_password_line(self, line: str, match_value: str) -> bool:
         """Validate that a password assignment is a literal credential, not a variable/function."""
@@ -376,7 +412,14 @@ class SecretsScanner(BaseScanner):
             return secret[:4] + "*" * (len(secret) - 8) + secret[-4:]
         return "***"
 
-    def _check_high_entropy_strings(self, lines: list[str], file_path: str, lang: Language) -> list[Finding]:
+    def _check_high_entropy_strings(
+        self,
+        lines: list[str],
+        file_path: str,
+        lang: Language,
+        reported_raws: set[str] | None = None,
+    ) -> list[Finding]:
+        reported_raws = reported_raws or set()
         findings = []
         for i, line in enumerate(lines, 1):
             stripped = line.strip()
@@ -391,6 +434,8 @@ class SecretsScanner(BaseScanner):
                     if "://" in match or "\\" in match:
                         continue
                     if re.search(r"@[a-z0-9.-]+\.[a-z]{2,}", match, re.IGNORECASE):
+                        continue
+                    if match in reported_raws:
                         continue
                     if is_weak_credential_value(match):
                         continue

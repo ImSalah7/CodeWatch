@@ -105,6 +105,8 @@ class ScanEngine:
 
             for scanner in self.scanners:
                 try:
+                    if hasattr(scanner, "should_scan") and not scanner.should_scan(str(rel)):
+                        continue
                     findings = scanner.scan_file(content, str(rel), language)
                     new_findings = 0
                     for f in findings:
