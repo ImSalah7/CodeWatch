@@ -19,9 +19,7 @@ CREDENTIAL_RULE_IDS: frozenset[str] = frozenset({"SEC017"})
 # not XSS: there is no user input flowing into the sink.
 XSS_RULE_IDS: frozenset[str] = frozenset({"SEC004", "SEC005"})
 
-_CREDENTIAL_ASSIGNMENT = re.compile(
-    r"(?i)\b(?:password|passwd|pwd|secret|api_key|apikey|token)\s*[=:]\s*[\"']([^\"']+)"
-)
+_CREDENTIAL_ASSIGNMENT = re.compile(r"(?i)(\w+)\s*[=:]\s*[\"']([^\"']+)")
 
 
 class SecurityScanner(BaseScanner):
@@ -152,10 +150,7 @@ class SecurityScanner(BaseScanner):
         m = _CREDENTIAL_ASSIGNMENT.search(line)
         if not m:
             return "", ""
-        start = m.start()
-        varname_match = re.search(r"(\w+)\s*[=:]", line[start:])
-        varname = varname_match.group(1) if varname_match else ""
-        return varname.lower(), m.group(1)
+        return m.group(1).lower(), m.group(2)
 
     def _validate_credential_match(self, line: str) -> bool:
         from ..core.secret_signals import known_format_label
@@ -165,8 +160,9 @@ class SecurityScanner(BaseScanner):
             return True
         # Password/passwd/pwd assignments are reported once as
         # SEC_PASSWORD_ASSIGNMENT by the secrets scanner; SEC017 (generic)
-        # would only duplicate them.
-        if any(k in varname for k in ("password", "passwd", "pwd")):
+        # would only duplicate them. Matches the variable's trailing keyword so
+        # compound names (DB_PASSWORD, APP_PASSWD) are covered too.
+        if any(varname == k or varname.endswith(f"_{k}") for k in ("password", "passwd", "pwd")):
             return False
         # Vendor-format values (ghp_..., AKIA..., AIza...) are reported by the
         # matching specific secrets rule, not by the generic SEC017 pattern.

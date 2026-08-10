@@ -151,6 +151,29 @@ class TestSecurityScanner:
         generic = [f for f in findings if f.rule_id == "SEC017"]
         assert len(generic) == 0
 
+    def test_sec017_does_not_duplicate_compound_password_names(self):
+        for varname in ("DB_PASSWORD", "APP_PASSWD", "api_pwd", "PG_PASSWORD"):
+            code = f'{varname} = "SuperSecret2024!"'
+            findings = self.scanner.scan_file(code, "app.py", Language.PYTHON)
+            generic = [f for f in findings if f.rule_id == "SEC017"]
+            assert len(generic) == 0, varname
+
+    def test_sec017_does_not_duplicate_compound_vendor_formats(self):
+        for code in (
+            'GITHUB_TOKEN = "ghp_ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghij"',
+            'OPENAI_API_KEY = "sk-proj-AbCdEfGhIjKlMnOpQrStUvWxYz0123456789"',
+            'AWS_SECRET = "AKIA2X7KQ4N5B8VZ6C2D"',
+        ):
+            findings = self.scanner.scan_file(code, "app.py", Language.PYTHON)
+            generic = [f for f in findings if f.rule_id == "SEC017"]
+            assert len(generic) == 0, code
+
+    def test_sec017_still_reports_non_format_secret(self):
+        code = 'GITHUB_TOKEN = "aB3xZ9qW4rT7mN2vC5xE8fR1sT6uY0i"'
+        findings = self.scanner.scan_file(code, "app.py", Language.PYTHON)
+        generic = [f for f in findings if f.rule_id == "SEC017"]
+        assert len(generic) == 1
+
     def test_sec017_single_line_code_snippet(self):
         code = 'api_key = "aB3xZ9qW4rT7mN2vC5xE8fR1sT6uY0i"'
         findings = self.scanner.scan_file(code, "app.py", Language.PYTHON)

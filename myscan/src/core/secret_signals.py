@@ -437,6 +437,7 @@ _KNOWN_PREFIXES: tuple[tuple[re.Pattern[str], str], ...] = (
     (re.compile(r"^rk_live_[0-9a-zA-Z]{24,}$"), "Stripe Restricted Key"),
     (re.compile(r"^sk_test_[0-9a-zA-Z]{24,}$"), "Stripe Test Secret Key"),
     (re.compile(r"^sk-ant-[A-Za-z0-9_\-]{30,}$"), "Anthropic API Key"),
+    (re.compile(r"^sk-(?:proj-)?[A-Za-z0-9_\-]{32,}$"), "OpenAI API Key"),
     (re.compile(r"^hf_[A-Za-z0-9]{34}$"), "Hugging Face Token"),
     (re.compile(r"^npm_[A-Za-z0-9]{36}$"), "NPM Access Token"),
     (re.compile(r"^pypi-[A-Za-z0-9_\-]{30,}$"), "PyPI Token"),
