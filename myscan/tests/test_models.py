@@ -116,6 +116,38 @@ class TestScanResult:
         assert r.risk_score > 0
         assert r.grade in ("A", "B", "C", "D", "F")
 
+    def test_risk_score_excludes_false_positives_and_non_security(self):
+        r = ScanResult()
+        r.findings = [
+            Finding(
+                rule_id="SEC017", title="Hardcoded", description="T",
+                severity=Severity.CRITICAL, confidence=1.0,
+                category=FindingCategory.SECURITY, language=Language.PYTHON,
+                location=CodeLocation(file_path="x.py", line=1),
+                is_false_positive=True,
+            ),
+            Finding(
+                rule_id="SEC017", title="Hardcoded", description="T",
+                severity=Severity.CRITICAL, confidence=1.0,
+                category=FindingCategory.SECURITY, language=Language.PYTHON,
+                location=CodeLocation(file_path="x.py", line=2),
+                likely_false_positive=True,
+            ),
+            Finding(
+                rule_id="Q001", title="Style", description="T",
+                severity=Severity.CRITICAL, confidence=1.0,
+                category=FindingCategory.QUALITY, language=Language.PYTHON,
+                location=CodeLocation(file_path="x.py", line=3),
+            ),
+            Finding(
+                rule_id="DEP001", title="Vulnerable dep", description="T",
+                severity=Severity.HIGH, confidence=1.0,
+                category=FindingCategory.DEPENDENCY, language=Language.PYTHON,
+                location=CodeLocation(file_path="x.py", line=4),
+            ),
+        ]
+        assert r.risk_score == 0
+
     def test_deduplicate(self):
         r = ScanResult()
         f = Finding(

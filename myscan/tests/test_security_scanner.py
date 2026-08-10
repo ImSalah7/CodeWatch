@@ -115,6 +115,49 @@ class TestSecurityScanner:
         xss_findings = [f for f in findings if "innerHTML" in f.title]
         assert len(xss_findings) >= 1
 
+    def test_innerhtml_static_literal_not_reported(self):
+        code = 'element.innerHTML = "<h1>Hello</h1>";'
+        findings = self.scanner.scan_file(code, "app.js", Language.JAVASCRIPT)
+        xss_findings = [f for f in findings if "innerHTML" in f.title]
+        assert len(xss_findings) == 0
+
+    def test_innerhtml_interpolated_reported(self):
+        code = 'element.innerHTML = name + "</div>";'
+        findings = self.scanner.scan_file(code, "app.js", Language.JAVASCRIPT)
+        xss_findings = [f for f in findings if "innerHTML" in f.title]
+        assert len(xss_findings) >= 1
+
+    def test_dangerously_set_innerhtml_static_not_reported(self):
+        code = 'return <div dangerouslySetInnerHTML={{__html: "<b>hi</b>"}} />;'
+        findings = self.scanner.scan_file(code, "App.jsx", Language.JAVASCRIPT)
+        react_findings = [f for f in findings if "dangerouslySetInnerHTML" in f.title]
+        assert len(react_findings) == 0
+
+    def test_dangerously_set_innerhtml_dynamic_reported(self):
+        code = 'return <div dangerouslySetInnerHTML={{__html: html}} />;'
+        findings = self.scanner.scan_file(code, "App.jsx", Language.JAVASCRIPT)
+        react_findings = [f for f in findings if "dangerouslySetInnerHTML" in f.title]
+        assert len(react_findings) >= 1
+
+    def test_sec017_does_not_duplicate_vendor_formats(self):
+        code = 'token = "ghp_ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghij"'
+        findings = self.scanner.scan_file(code, "app.py", Language.PYTHON)
+        generic = [f for f in findings if f.rule_id == "SEC017"]
+        assert len(generic) == 0
+
+    def test_sec017_does_not_duplicate_password_assignments(self):
+        code = 'password = "P@ssw0rd!XyZz99"'
+        findings = self.scanner.scan_file(code, "app.py", Language.PYTHON)
+        generic = [f for f in findings if f.rule_id == "SEC017"]
+        assert len(generic) == 0
+
+    def test_sec017_single_line_code_snippet(self):
+        code = 'api_key = "aB3xZ9qW4rT7mN2vC5xE8fR1sT6uY0i"'
+        findings = self.scanner.scan_file(code, "app.py", Language.PYTHON)
+        sec017 = [f for f in findings if f.rule_id == "SEC017"]
+        assert len(sec017) == 1
+        assert sec017[0].location.code_snippet == code
+
     def test_path_traversal(self):
         code = 'with open(request.args["file"]) as f:'
         findings = self.scanner.scan_file(code, "app.py", Language.PYTHON)

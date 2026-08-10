@@ -64,6 +64,7 @@ SETTINGS_FILE = os.path.join(
 DEFAULT_SETTINGS = {
     "threads": 4,
     "min_confidence": 0.2,
+    "skip_info": True,
     "enterprise_mode": False,
     "secret_display": "smart",
     "max_file_size_kb": 1024,
@@ -372,6 +373,7 @@ def _scan_metadata_dict(job, source: str, job_id: str) -> dict:
             "findings_total": summary.get("total_findings", 0),
             "risk_score": summary.get("risk_score", 0),
             "grade": summary.get("grade", "A+"),
+            "severity_counts": summary.get("severity_counts", {}),
         }
     result = job.get("result") or {}
     summary = result.get("summary", {}) or {}
@@ -396,6 +398,7 @@ def _scan_metadata_dict(job, source: str, job_id: str) -> dict:
         "findings_total": summary.get("total_findings", 0),
         "risk_score": summary.get("risk_score", 0),
         "grade": summary.get("grade", "A+"),
+        "severity_counts": summary.get("severity_counts", {}),
     }
 
 
@@ -545,6 +548,7 @@ def start_scan():
     config = ScanConfig()
     config.min_confidence = min_confidence
     config.max_workers = threads
+    config.skip_info = bool(body.get("skip_info", _load_settings().get("skip_info", True)))
 
     job_id = uuid.uuid4().hex[:12]
     job = ScanJob(

@@ -81,6 +81,7 @@ export interface FindingsMetadata {
   findings_total: number;
   risk_score: number;
   grade: string;
+  severity_counts: Record<string, number>;
 }
 
 export interface FindingsResponse {

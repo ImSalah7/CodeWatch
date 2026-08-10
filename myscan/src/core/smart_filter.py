@@ -30,8 +30,10 @@ class SmartFilter:
         ) and finding.category == FindingCategory.SECURITY:
             return True
         code = finding.location.code_snippet or ""
-        finding.title.lower()
         file_lower = finding.location.file_path.lower()
+
+        if self._reject_placeholder_credential(finding, code):
+            return True
 
         if (
             "readme" in file_lower or "docs/" in file_lower or "example" in file_lower
@@ -51,6 +53,36 @@ class SmartFilter:
         if "test" in file_lower and finding.category == FindingCategory.SECURITY:
             finding.confidence *= 0.5
             finding.confidence_reasoning = "Found in test file, reduced confidence"
+        return False
+
+    def _reject_placeholder_credential(self, finding: Finding, code: str) -> bool:
+        """Demote findings whose matched credential value is a placeholder or a
+        weak value that slipped past the scanners (defense in depth)."""
+        from ..core.secret_signals import (
+            is_placeholder_value,
+            is_weak_credential_value,
+            known_format_label,
+        )
+
+        raw = (finding.raw_secret or "").strip().strip("'\"")
+        if not raw and code:
+            import re
+
+            match = re.search(r'[=:]\s*["\']([^"\']+)["\']', code)
+            raw = match.group(1).strip() if match else ""
+        if not raw:
+            return False
+        if is_placeholder_value(raw):
+            finding.confidence_reasoning = f"Matched value {raw!r} is a placeholder/weak credential"
+            finding.is_false_positive = True
+            return True
+        # PEM headers legitimately contain `-----` runs, so skip the weak-value
+        # check for values with a structurally unambiguous format (private keys,
+        # vendor-prefixed tokens); those are validated elsewhere.
+        if known_format_label(raw) is None and is_weak_credential_value(raw):
+            finding.confidence_reasoning = f"Matched value {raw!r} is a placeholder/weak credential"
+            finding.is_false_positive = True
+            return True
         return False
 
     def should_include_finding(self, finding: Finding) -> bool:

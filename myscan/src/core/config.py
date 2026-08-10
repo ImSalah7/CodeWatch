@@ -60,6 +60,7 @@ class ScanConfig:
     skip_deps: bool = False
     skip_git: bool = False
     skip_quality: bool = False
+    skip_info: bool = True
     skip_secrets: bool = False
     skip_security: bool = False
     include_tests: bool = False

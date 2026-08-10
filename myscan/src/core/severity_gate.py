@@ -59,6 +59,11 @@ _STRONG_VERIFICATION_LEVELS: frozenset[str] = frozenset({
     "highly_verified",
 })
 
+# Regex-only findings (no AST/type/taint/secret-classification evidence) must
+# not claim an inflated confidence: a pattern hit cannot know how confident it
+# is, and over-confident regex matches would skew the risk score upward.
+REGEX_ONLY_CONFIDENCE_CAP: float = 0.60
+
 
 def _evidence_summaries(finding: Any) -> list[dict]:
     evidence = getattr(finding, "evidence", None) or []
@@ -140,16 +145,37 @@ def gate_severity(finding: Any) -> tuple[Severity, str]:
     return Severity[target], note
 
 
+def _cap_weak_evidence_confidence(finding: Any) -> bool:
+    """Cap the confidence of findings that lack strong corroborating evidence.
+
+    Returns True when the confidence was lowered.
+    """
+    if _has_strong_evidence(finding):
+        return False
+    confidence = getattr(finding, "confidence", 0.0) or 0.0
+    if confidence <= REGEX_ONLY_CONFIDENCE_CAP:
+        return False
+    finding.confidence = REGEX_ONLY_CONFIDENCE_CAP
+    reasoning = getattr(finding, "confidence_reasoning", "") or ""
+    note = f"Confidence capped at {REGEX_ONLY_CONFIDENCE_CAP:.2f}: pattern-only evidence"
+    if note not in reasoning:
+        finding.confidence_reasoning = f"{note} | {reasoning}" if reasoning else note
+    return True
+
+
 def apply_severity_gate(finding: Any) -> bool:
     """Demote finding.severity in place when evidence/confidence is weak.
 
     Returns True if the severity was changed.
     """
+    changed = False
     new_severity, note = gate_severity(finding)
-    if new_severity is finding.severity or new_severity == finding.severity:
-        return False
-    finding.severity = new_severity
-    reasoning = getattr(finding, "confidence_reasoning", "") or ""
-    if note and note not in reasoning:
-        finding.confidence_reasoning = f"{note} | {reasoning}" if reasoning else note
-    return True
+    if new_severity is not finding.severity and new_severity != finding.severity:
+        finding.severity = new_severity
+        reasoning = getattr(finding, "confidence_reasoning", "") or ""
+        if note and note not in reasoning:
+            finding.confidence_reasoning = f"{note} | {reasoning}" if reasoning else note
+        changed = True
+    if _cap_weak_evidence_confidence(finding):
+        changed = True
+    return changed

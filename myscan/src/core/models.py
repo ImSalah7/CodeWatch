@@ -299,7 +299,13 @@ class ScanResult:
 
     @property
     def risk_score(self) -> int:
-        score = sum(f.severity.weight * f.confidence for f in self.findings)
+        score = 0.0
+        for f in self.findings:
+            if f.is_false_positive or f.likely_false_positive:
+                continue
+            if f.category not in (FindingCategory.SECURITY, FindingCategory.SECRET):
+                continue
+            score += f.severity.weight * f.confidence
         return min(int(score), 100)
 
     @property

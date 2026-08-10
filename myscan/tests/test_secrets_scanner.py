@@ -111,6 +111,36 @@ class TestSecretsScanner:
         findings = self.scanner.scan_file(code, "config.py", Language.PYTHON)
         assert len([f for f in findings if "Azure" in f.title]) >= 1
 
+    def test_github_url_credentials(self):
+        code = 'REPO = "https://octocat:Sup3rSecretToken!@github.com/org/repo.git"'
+        findings = self.scanner.scan_file(code, "config.py", Language.PYTHON)
+        assert len([f for f in findings if "GitHub Remote URL" in f.title]) >= 1
+
+    def test_google_oauth_client_secret(self):
+        code = 'GOOGLE_CLIENT_SECRET = "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4J3k"'
+        findings = self.scanner.scan_file(code, "config.py", Language.PYTHON)
+        assert len([f for f in findings if "OAuth Client Secret" in f.title]) >= 1
+
+    def test_digitalocean_token(self):
+        code = 'DIGITALOCEAN_TOKEN = "dop_v1_0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef"'
+        findings = self.scanner.scan_file(code, "config.py", Language.PYTHON)
+        assert len([f for f in findings if "DigitalOcean" in f.title]) >= 1
+
+    def test_aws_session_key(self):
+        code = 'AWS_SESSION_TOKEN = "ASIA2EPBN2U4Z3FQRXDF"'
+        findings = self.scanner.scan_file(code, "config.py", Language.PYTHON)
+        assert len([f for f in findings if "AWS" in f.title]) >= 1
+
+    def test_sqlserver_db_url_creds(self):
+        code = 'DB_CONN = "sqlserver://sa:Sup3rSecret!@db.internal:1433;database=app"'
+        findings = self.scanner.scan_file(code, "config.py", Language.PYTHON)
+        assert len([f for f in findings if "Credentials in URL" in f.title]) >= 1
+
+    def test_oracle_db_url_creds(self):
+        code = 'DB_CONN = "oracle://app_user:Sup3rSecret!@oracle.internal:1521/ORCL"'
+        findings = self.scanner.scan_file(code, "config.py", Language.PYTHON)
+        assert len([f for f in findings if "Credentials in URL" in f.title]) >= 1
+
     def test_db_credentials_in_url(self):
         code = 'DATABASE_URL = "postgres://admin:Sup3rSecret!@db.internal:5432/app"'
         findings = self.scanner.scan_file(code, "config.py", Language.PYTHON)
@@ -201,6 +231,21 @@ class TestSecretFalsePositiveRejection:
         self.assert_no_findings(
             'build_id = "AIzaSyA-abcdefghijklmnopqrstuvwxyz01234567"'
         )
+
+    def test_github_url_with_placeholder_password_rejected(self):
+        self.assert_no_findings(
+            'REPO = "https://your_username:your_token_here@github.com/org/repo.git"'
+        )
+
+    def test_github_url_without_credentials_rejected(self):
+        self.assert_no_findings('REPO = "https://github.com/org/repo.git"')
+
+    def test_generic_key_in_fixture_path_rejected(self):
+        findings = self.scanner.scan_file(
+            'api_key = "aB3dE5fG7hI9jK1lM3nO5pQ7rS9tU1vW3xY5"',
+            "tests/fixtures/app.py", Language.PYTHON,
+        )
+        assert findings == []
 
 
 class TestGenuineSecretPreservation:
@@ -299,3 +344,40 @@ class TestEngineLevelValidation:
     def test_documented_example_aws_key_rejected(self):
         findings = _engine_findings({"creds.py": 'AWS_ACCESS_KEY_ID = "AKIAIOSFODNN7EXAMPLE"\n'})
         assert not [f for f in findings if f.rule_id in ("SEC_AWS_ACCESS_KEY", "SEC043")]
+
+    def test_github_url_credentials_survive_pipeline(self):
+        findings = _engine_findings({
+            "deploy.sh": 'git clone "https://octocat:Sup3rSecretToken!@github.com/org/repo.git"\n',
+        })
+        assert any(f.rule_id == "SEC_GITHUB_URL_CREDS" for f in findings)
+
+
+class TestSkipInfoBehavior:
+    """INFO-severity findings (quality-style notes, demoted placeholders) are
+    skipped by default for faster, focused scans; real secrets still surface."""
+
+    def _run(self, content: str, skip_info: bool = True) -> list:
+        import tempfile
+        from pathlib import Path
+
+        with tempfile.TemporaryDirectory() as td:
+            root = Path(td)
+            (root / "app.py").write_text(content)
+            cfg = ScanConfig(skip_info=skip_info)
+            return ScanEngine(cfg).scan(str(root)).findings
+
+    def test_info_findings_dropped_by_default(self):
+        findings = self._run('LONG = "' + "x" * 600 + '"\n')
+        assert not [f for f in findings if f.severity.value == "info"]
+
+    def test_quality_findings_kept_when_info_enabled(self):
+        findings = self._run('LONG = "' + "x" * 600 + '"\n', skip_info=False)
+        assert any(f.rule_id == "QLT001" for f in findings)
+
+    def test_real_secrets_survive_info_skip(self):
+        findings = self._run('AWS_ACCESS_KEY_ID = "AKIA2EPBN2U4Z3FQRXDF"\n')
+        assert any(f.rule_id == "SEC_AWS_ACCESS_KEY" for f in findings)
+
+    def test_demoted_placeholder_dropped_by_default(self):
+        findings = self._run('password = "P@ssword123!"\n')
+        assert not [f for f in findings if f.severity.value == "info"]

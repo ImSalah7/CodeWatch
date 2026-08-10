@@ -72,6 +72,7 @@ def cli():
 @click.option("-l", "--local", is_flag=True, help="Scan a local directory")
 @click.option("--no-deps", is_flag=True, help="Skip dependency scanning")
 @click.option("--no-quality", is_flag=True, help="Skip quality scanning")
+@click.option("--include-info", is_flag=True, help="Include INFO-severity findings (default: skipped for speed)")
 @click.option("--no-secrets", is_flag=True, help="Skip secrets scanning")
 @click.option("--no-security", is_flag=True, help="Skip security scanning")
 @click.option("--include-tests", is_flag=True, help="Include test files")
@@ -88,7 +89,7 @@ def cli():
               help="Show full secrets in reports (equivalent to --secret-display=full)")
 @click.option("--developer-mode", "secret_display_override", flag_value="full",
               help="Developer mode: show all secrets for easy debugging")
-def scan(target, output, fmt, local, no_deps, no_quality, no_secrets, no_security,
+def scan(target, output, fmt, local, no_deps, no_quality, include_info, no_secrets, no_security,
          include_tests, include_docs, severity, threads, enterprise,
          secret_display, secret_display_override):
     """Scan a repository or directory for security vulnerabilities and code quality issues."""
@@ -109,6 +110,7 @@ def scan(target, output, fmt, local, no_deps, no_quality, no_secrets, no_securit
             local=local or Path(local_path).exists(),
             skip_deps=no_deps,
             skip_quality=no_quality,
+            skip_info=not include_info,
             skip_secrets=no_secrets,
             skip_security=no_security,
             include_tests=include_tests,
@@ -308,7 +310,7 @@ def _save_report(result, output_path: Path, fmt: str):
 def run_scan(target: str, local: bool = False, use_ai: bool = False, skip_deps: bool = False,
              skip_security: bool = False, skip_quality: bool = False, skip_secrets: bool = False,
              include_tests: bool = False, include_docs: bool = False, severity: str = "info",
-             enterprise: bool = False,
+             enterprise: bool = False, include_info: bool = False,
              secret_display: str = "smart") -> list[dict]:
     """Programmatic scan function for dashboard/API use."""
     from .core.secret_display import SecretDisplayConfig, apply_secret_display_mode
@@ -322,6 +324,7 @@ def run_scan(target: str, local: bool = False, use_ai: bool = False, skip_deps: 
             local=local or Path(local_path).exists(),
             skip_deps=skip_deps,
             skip_quality=skip_quality,
+            skip_info=not include_info,
             skip_secrets=skip_secrets,
             skip_security=skip_security,
             include_tests=include_tests,

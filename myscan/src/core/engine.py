@@ -16,6 +16,7 @@ from ..core.models import (
     FindingCategory,
     Language,
     ScanResult,
+    Severity,
 )
 from ..core.rules import ALL_RULES
 from .smart_filter import SmartFilter
@@ -51,7 +52,7 @@ class ScanEngine:
 
         if not self.config.skip_security:
             self.scanners.append(SecurityScanner())
-        if not self.config.skip_quality:
+        if not (self.config.skip_quality or self.config.skip_info):
             self.scanners.append(QualityScanner())
         if not self.config.skip_secrets:
             self.scanners.append(SecretsScanner())
@@ -130,6 +131,7 @@ class ScanEngine:
             result.filter_false_positives()
         result.apply_severity_gates()
         result.group_duplicates()
+        self._drop_info_findings(result)
         result.scan_end = __import__("datetime").datetime.now(__import__("datetime").timezone.utc)
         result.scan_duration = time.time() - start
         result.rules_executed = len(ALL_RULES)
@@ -312,11 +314,18 @@ class ScanEngine:
         result.deduplicate()
         result.apply_severity_gates()
         result.group_duplicates()
+        self._drop_info_findings(result)
         result.scan_end = __import__("datetime").datetime.now(__import__("datetime").timezone.utc)
         result.scan_duration = time.time() - start
         result.rules_executed = len(ALL_RULES)
         result.target = str(target_path)
         return result
+
+    def _drop_info_findings(self, result: ScanResult) -> None:
+        """INFO-severity findings are low-value noise (code-quality style notes,
+        demoted placeholders). Skip them for faster, focused results."""
+        if self.config.skip_info:
+            result.findings = [f for f in result.findings if f.severity != Severity.INFO]
 
     def _collect_files(self, root: Path) -> list[Path]:
         files: list[Path] = []

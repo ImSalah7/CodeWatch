@@ -9,6 +9,21 @@ from ..core.rules import ALL_RULES, Rule
 from ..scanners import BaseScanner
 
 
+# Rules whose regex cannot distinguish a real credential from a placeholder,
+# header name, or variable reference. The matched line is handed to the
+# validation pipeline as the code snippet so the multi-signal secret gates
+# (placeholder / weak-value / prose / known-format) actually see the value.
+CREDENTIAL_RULE_IDS: frozenset[str] = frozenset({"SEC017"})
+
+# innerHTML / dangerouslySetInnerHTML sinks assigned a pure static literal are
+# not XSS: there is no user input flowing into the sink.
+XSS_RULE_IDS: frozenset[str] = frozenset({"SEC004", "SEC005"})
+
+_CREDENTIAL_ASSIGNMENT = re.compile(
+    r"(?i)\b(?:password|passwd|pwd|secret|api_key|apikey|token)\s*[=:]\s*[\"']([^\"']+)"
+)
+
+
 class SecurityScanner(BaseScanner):
     name = "security"
     description = "Pattern-based security vulnerability scanner"
@@ -58,7 +73,11 @@ class SecurityScanner(BaseScanner):
                             line=i,
                             column=match.start() + 1,
                             function=function_name,
-                            code_snippet=snippet,
+                            # Store the matched line, not a multi-line window:
+                            # the validation pipeline extracts the assigned
+                            # value from the snippet, so context would hide the
+                            # credential behind unrelated surrounding code.
+                            code_snippet=line,
                         ),
                         cwe=rule.cwe,
                         cwe_name=rule.cwe_name,
@@ -92,9 +111,23 @@ class SecurityScanner(BaseScanner):
         For SQL injection (SEC001), a parameterized execute() call such as
         ``execute("SELECT ... %s", params)`` is safe even though the query
         string contains a ``%s`` placeholder, so we drop those matches.
+
+        Credential rules (SEC017) must not duplicate format-specific secrets
+        (e.g. a ``token = "ghp_..."`` GitHub token is reported by the secrets
+        scanner) or password assignments (reported as SEC_PASSWORD_ASSIGNMENT).
+
+        XSS sinks (SEC004/SEC005) assigned a pure static string contain no
+        user input and are not vulnerabilities.
         """
-        if rule.id != "SEC001":
-            return True
+        if rule.id == "SEC001":
+            return self._validate_sql_injection(line)
+        if rule.id in CREDENTIAL_RULE_IDS:
+            return self._validate_credential_match(line)
+        if rule.id in XSS_RULE_IDS:
+            return not self._is_static_html_rhs(line)
+        return True
+
+    def _validate_sql_injection(self, line: str) -> bool:
         # If the query string is interpolated (f-string, concatenation,
         # .format(), or %-formatting) it is dangerous regardless of whether an
         # extra bind-parameter argument is also present.
@@ -113,6 +146,62 @@ class SecurityScanner(BaseScanner):
             line,
         )
         return not param_call
+
+    def _extract_credential(self, line: str) -> tuple[str, str]:
+        """Return (varname_lower, value) for a credential assignment line."""
+        m = _CREDENTIAL_ASSIGNMENT.search(line)
+        if not m:
+            return "", ""
+        start = m.start()
+        varname_match = re.search(r"(\w+)\s*[=:]", line[start:])
+        varname = varname_match.group(1) if varname_match else ""
+        return varname.lower(), m.group(1)
+
+    def _validate_credential_match(self, line: str) -> bool:
+        from ..core.secret_signals import known_format_label
+
+        varname, value = self._extract_credential(line)
+        if not value:
+            return True
+        # Password/passwd/pwd assignments are reported once as
+        # SEC_PASSWORD_ASSIGNMENT by the secrets scanner; SEC017 (generic)
+        # would only duplicate them.
+        if any(k in varname for k in ("password", "passwd", "pwd")):
+            return False
+        # Vendor-format values (ghp_..., AKIA..., AIza...) are reported by the
+        # matching specific secrets rule, not by the generic SEC017 pattern.
+        return not known_format_label(value.strip())
+
+    def _is_static_html_rhs(self, line: str) -> bool:
+        """True when the sink is assigned a pure static string literal.
+
+        A React ``{{__html: "..."}}`` or ``element.innerHTML = "..."`` with no
+        interpolation carries no user input, so it is not a DOM-XSS sink.
+        """
+        eq = line.find("=")
+        if eq < 0:
+            return False
+        rhs = line[eq + 1:].strip()
+        if rhs.startswith("{{__html:"):
+            end = rhs.find("}}")
+            if end < 0:
+                return False
+            inner = rhs[len("{{__html:"):end].strip()
+        elif rhs.startswith("{__html:"):
+            end = rhs.find("}")
+            if end < 0:
+                return False
+            inner = rhs[len("{__html:"):end].strip()
+        else:
+            inner = rhs.rstrip(";").strip()
+        if not inner:
+            return False
+        if (inner.startswith('"') and inner.endswith('"')) or (
+            inner.startswith("'") and inner.endswith("'")
+        ):
+            body = inner[1:-1]
+            return "{" not in body and "}" not in body and "+" not in body and "$" not in body
+        return False
 
     def _detect_mechanism(self, rule: Rule, matched: str) -> str:
         if rule.id == "SEC001":

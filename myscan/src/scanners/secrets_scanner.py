@@ -5,14 +5,17 @@ from __future__ import annotations
 import math
 import re
 from collections import Counter
+from pathlib import Path
 
 from ..core.models import CodeLocation, Finding, FindingCategory, Language, Severity
 from ..core.secret_signals import score_secret, secret_rule_kind
 from ..core.validation_engine import is_weak_credential_value
 from ..scanners import BaseScanner
 
+_DB_SCHEMES = r"(?:mysql|postgres(?:ql)?|mongodb(?:\+srv)?|redis|sqlserver|mssql|oracle|cassandra|clickhouse|sqlite)"
+
 SECRET_PATTERNS: list[tuple[str, str, str, Severity, float, str, str]] = [
-    ("aws_access_key", r"AKIA[0-9A-Z]{16}", "AWS Access Key ID", Severity.CRITICAL, 0.95, "CWE-798", "Use IAM roles or environment variables."),
+    ("aws_access_key", r"(?:AKIA|ASIA|ABIA|ACCA)[0-9A-Z]{16}", "AWS Access Key ID", Severity.CRITICAL, 0.95, "CWE-798", "Use IAM roles or environment variables."),
     ("aws_secret_key", r"(?i)aws_secret_access_key\s*[=:]\s*['\"]?[A-Za-z0-9/+=]{40,}", "AWS Secret Access Key", Severity.CRITICAL, 0.95, "CWE-798", "Use IAM roles or environment variables."),
     ("github_token", r"ghp_[A-Za-z0-9]{36}", "GitHub Personal Access Token", Severity.CRITICAL, 0.95, "CWE-798", "Use GitHub Actions secrets."),
     ("github_oauth", r"gho_[A-Za-z0-9]{36}", "GitHub OAuth Token", Severity.CRITICAL, 0.95, "CWE-798", "Use GitHub Actions secrets."),
@@ -26,7 +29,7 @@ SECRET_PATTERNS: list[tuple[str, str, str, Severity, float, str, str]] = [
     ("private_key_header", r"-----BEGIN (?:RSA |EC |DSA |OPENSSH )?PRIVATE KEY-----", "Private Key", Severity.CRITICAL, 0.95, "CWE-321", "Never commit private keys. Use a secrets manager."),
     ("generic_api_key", r"(?i)(?:api[_-]?key|apikey|api_secret|api[_-]?secret)\s*[=:]\s*['\"]?[A-Za-z0-9\-_]{20,}", "Potential API Key", Severity.HIGH, 0.7, "CWE-798", "Move to environment variables."),
     ("password_assignment", r"(?i)(?:password|passwd|pwd)\s*[=:]\s*['\"]?[^'\"\s]{8,}", "Hardcoded Password", Severity.CRITICAL, 0.85, "CWE-798", "Use a secrets manager."),
-    ("database_url", r"(?i)(?:db[_-]?url|database[_-]?url|mysql[_-]?url|postgres(?:ql)?[_-]?url|mongo(?:db)?[_-]?url)\s*[=:]\s*['\"]?(?:mysql|postgres(?:ql)?|mongodb|redis|sqlite)://", "Database Connection String", Severity.HIGH, 0.8, "CWE-798", "Use environment variables for connection strings."),
+    ("database_url", rf"(?i)(?:db[_-]?url|database[_-]?url|mysql[_-]?url|postgres(?:ql)?[_-]?url|mongo(?:db)?[_-]?url|sqlserver[_-]?url|oracle[_-]?url)\s*[=:]\s*['\"]?{_DB_SCHEMES}://", "Database Connection String", Severity.HIGH, 0.8, "CWE-798", "Use environment variables for connection strings."),
     ("jwt_token", r"eyJ[A-Za-z0-9\-_]+\.eyJ[A-Za-z0-9\-_]+\.[A-Za-z0-9\-_.+/=]+", "JWT Token", Severity.HIGH, 0.8, "CWE-798", "Rotate tokens regularly. Never commit tokens."),
     ("npm_token", r"npm_[A-Za-z0-9]{36}", "NPM Access Token", Severity.CRITICAL, 0.9, "CWE-798", "Use .npmrc with environment variables."),
     ("sendgrid_key", r"SG\.[A-Za-z0-9\-_]{22}\.[A-Za-z0-9\-_]{43}", "SendGrid API Key", Severity.CRITICAL, 0.95, "CWE-798", "Use environment variables."),
@@ -40,7 +43,10 @@ SECRET_PATTERNS: list[tuple[str, str, str, Severity, float, str, str]] = [
     ("pypi_token", r"pypi-[A-Za-z0-9_\-]{30,}", "PyPI Token", Severity.HIGH, 0.85, "CWE-798", "Use trusted publishing or environment variables."),
     ("stripe_restricted_key", r"rk_live_[0-9a-zA-Z]{24,}", "Stripe Restricted Key", Severity.CRITICAL, 0.95, "CWE-798", "Use Stripe environment variables."),
     ("azure_account_key", r"(?i)accountkey\s*[=:]\s*['\"]?[A-Za-z0-9+/=]{40,}", "Azure Storage Account Key", Severity.HIGH, 0.85, "CWE-798", "Use managed identities and short-lived SAS tokens."),
-    ("cloud_db_url_creds", r"(?:mysql|postgres(?:ql)?|mongodb(?:\+srv)?|redis)://[^\s:'\"]+:[^\s@'\"]+@", "Database Credentials in URL", Severity.HIGH, 0.85, "CWE-798", "Never embed credentials in connection URLs."),
+    ("github_url_creds", r"https?://[^/\s:@]+:[^@\s/]+@(?:github\.com|gist\.github\.com|raw\.githubusercontent\.com)", "GitHub Remote URL with Credentials", Severity.CRITICAL, 0.9, "CWE-798", "Never embed credentials in git clone URLs."),
+    ("google_oauth_client_secret", r"GOCSPX-[A-Za-z0-9_-]{28}", "Google OAuth Client Secret", Severity.HIGH, 0.9, "CWE-798", "Use Google Cloud Secret Manager and environment variables."),
+    ("digitalocean_token", r"dop_v1_[a-f0-9]{64}", "DigitalOcean Personal Access Token", Severity.HIGH, 0.9, "CWE-798", "Use environment variables."),
+    ("cloud_db_url_creds", rf"{_DB_SCHEMES}://[^\s:'\"]+:[^\s@'\"]+@", "Database Credentials in URL", Severity.HIGH, 0.85, "CWE-798", "Never embed credentials in connection URLs."),
 ]
 
 NOT_LITERAL_PATTERNS = [
@@ -208,6 +214,9 @@ SECRET_CLASSIFICATIONS: dict[str, tuple[str, str, str]] = {
     "pypi_token": ("PyPI Token", "api_token", "PyPI"),
     "stripe_restricted_key": ("Stripe Restricted Key", "payment_key", "Stripe"),
     "azure_account_key": ("Azure Storage Account Key", "cloud_credential", "Azure"),
+    "github_url_creds": ("GitHub Remote URL with Credentials", "connection_string", "GitHub"),
+    "google_oauth_client_secret": ("Google OAuth Client Secret", "api_key", "Google"),
+    "digitalocean_token": ("DigitalOcean Personal Access Token", "cloud_credential", "DigitalOcean"),
     "cloud_db_url_creds": ("Database Credentials in URL", "connection_string", "Database"),
     "high_entropy": ("High-Entropy String", "potential_secret", "Generic"),
 }
@@ -223,6 +232,7 @@ class SecretsScanner(BaseScanner):
     def scan_file(self, content: str, file_path: str, language: Language) -> list[Finding]:
         findings: list[Finding] = []
         lines = content.splitlines()
+        ctx = self._file_context(file_path)
 
         for secret_type, pattern, _title, severity, confidence, cwe, fix in SECRET_PATTERNS:
             try:
@@ -254,6 +264,10 @@ class SecretsScanner(BaseScanner):
                 # mixed charset, or an unambiguous secret format).
                 variable_name = _extract_variable_name(line)
                 rule_kind = secret_rule_kind(secret_type)
+                # Example/fixture context: generic & entropy-only candidates are
+                # almost always scaffolding, not live credentials.
+                if ctx == "low" and rule_kind in ("generic_key", "password", "high_entropy"):
+                    continue
                 validation_checks: list[str] = []
                 if rule_kind:
                     signal_score = score_secret(rule_kind, raw, variable_name, is_literal=True)
@@ -263,6 +277,8 @@ class SecretsScanner(BaseScanner):
                     validation_checks = list(signal_score.checks)
                 else:
                     adjusted_confidence = self._adjust_confidence(confidence, line)
+                if ctx == "high":
+                    adjusted_confidence = min(adjusted_confidence + 0.05, 0.95)
 
                 findings.append(Finding(
                     rule_id=f"SEC_{secret_type.upper()}",
@@ -303,9 +319,45 @@ class SecretsScanner(BaseScanner):
                 file_path,
                 language,
                 reported_raws={f.raw_secret for f in findings},
+                ctx=ctx,
             )
         )
         return findings
+
+    def _file_context(self, file_path: str) -> str:
+        """Categorize a file path by how likely it is to hold live credentials.
+
+        Returns "high" (config/.env/secret files), "low" (examples, fixtures,
+        tests, docs), or "neutral". Config files give a small confidence boost
+        because secrets there are real; example/fixture paths suppress generic
+        and entropy-only candidates which are usually scaffolding.
+        """
+        lower = file_path.lower()
+        if any(x in lower for x in (
+            "/test", "/tests", "/spec", "/fixtures", "/fixture", "/testdata",
+            "/examples", "/example", "/demos", "/demo", "/docs", "/doc/",
+            "/.github/", "/.circleci/", "/.travis/", "/samples", "/sample",
+            "/playground", "/sandbox", "testdata/", "test-data/",
+        )):
+            return "low"
+        name = Path(file_path).name.lower()
+        if (
+            name == ".env"
+            or name.startswith(".env.")
+            or ".env" in name
+            or name in (
+                "config.py", "settings.py", "configuration.py", "config.js",
+                "settings.json", "config.json", "application.json",
+                "wp-config.php", "database.yml", "database.yaml",
+                "application.yml", "application.yaml", "application.properties",
+                "secrets.yml", "secrets.yaml", "credentials.json",
+                "docker-compose.yml", "docker-compose.yaml", ".npmrc",
+                ".netrc", ".pypirc", "terraform.tfvars",
+            )
+            or lower.endswith((".ini", ".cfg", ".conf", ".properties", ".tfvars"))
+        ):
+            return "high"
+        return "neutral"
 
     def _has_complete_pem_block(self, lines: list[str], begin_idx: int) -> bool:
         """A PEM private key header only counts when the block is complete:
@@ -418,6 +470,7 @@ class SecretsScanner(BaseScanner):
         file_path: str,
         lang: Language,
         reported_raws: set[str] | None = None,
+        ctx: str = "neutral",
     ) -> list[Finding]:
         reported_raws = reported_raws or set()
         findings = []
@@ -434,6 +487,8 @@ class SecretsScanner(BaseScanner):
                     if "://" in match or "\\" in match:
                         continue
                     if re.search(r"@[a-z0-9.-]+\.[a-z]{2,}", match, re.IGNORECASE):
+                        continue
+                    if ctx == "low":
                         continue
                     if match in reported_raws:
                         continue

@@ -695,7 +695,7 @@ class ValidationPipeline:
             raw_secret = value
 
         if raw_secret:
-            stripped = raw_secret.strip("'\"").strip()
+            stripped = _clean_secret_value(raw_secret)
             if stripped.lower() in PLACEHOLDER_KEYWORDS:
                 negative_evidences.append(
                     self.evidence_engine.create_negative_evidence(
@@ -791,7 +791,7 @@ class ValidationPipeline:
             )
 
         if raw_secret:
-            entropy = _calculate_entropy(raw_secret.strip("'\""))
+            entropy = _calculate_entropy(_clean_secret_value(raw_secret))
             if entropy < 2.0:
                 negative_evidences.append(
                     self.evidence_engine.create_negative_evidence(
@@ -932,6 +932,9 @@ class ValidationPipeline:
             "SEC_STRIPE_RESTRICTED_KEY": "Stripe Restricted Key",
             "SEC_AZURE_ACCOUNT_KEY": "Azure Storage Account Key",
             "SEC_CLOUD_DB_URL_CREDS": "Database Credentials in URL",
+            "SEC_GITHUB_URL_CREDS": "GitHub Remote URL with Credentials",
+            "SEC_GOOGLE_OAUTH_CLIENT_SECRET": "Google OAuth Client Secret",
+            "SEC_DIGITALOCEAN_TOKEN": "DigitalOcean Personal Access Token",
         }
 
         if rule_id in classification_map:
@@ -1103,6 +1106,23 @@ def _extract_rhs_value(code_snippet: str) -> str | None:
         return match.group(1).strip()
 
     return None
+
+
+def _clean_secret_value(raw: str) -> str:
+    """Extract the raw secret body from a value that may carry quotes, a
+    trailing statement separator, or wrapping parentheses.
+
+    ``_extract_rhs_value`` returns the literal text after ``=``, which keeps
+    syntax such as ``"secret";`` or ``("secret")``. Before applying the
+    placeholder / weak-value / signal gates we need the bare value.
+    """
+    v = (raw or "").strip()
+    v = v.rstrip(";,").strip()
+    if v.startswith("(") and v.endswith(")"):
+        v = v[1:-1].strip()
+    if (v.startswith('"') and v.endswith('"')) or (v.startswith("'") and v.endswith("'")):
+        v = v[1:-1]
+    return v.strip()
 
 
 def _looks_like_variable_reference(value: str) -> bool:

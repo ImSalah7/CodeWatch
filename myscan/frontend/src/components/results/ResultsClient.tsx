@@ -327,7 +327,8 @@ export function ResultsClient({ initialJobId }: { initialJobId?: string }) {
       <div className="grid grid-cols-2 md:grid-cols-5 gap-4">
         {SEVERITY_ORDER.map((s) => {
           const { icon, color } = severityIcon(s);
-          const count = findings.filter((f) => f.severity === s).length;
+          const canonical = metadata?.severity_counts?.[s];
+          const count = canonical !== undefined ? canonical : findings.filter((f) => f.severity === s).length;
           return (
             <button key={s} onClick={() => updateFilter("severity", s)} className="text-left hover:opacity-90 transition">
               <MetricCard title={s.charAt(0).toUpperCase() + s.slice(1)} value={count} icon={icon} accentColor={color} />

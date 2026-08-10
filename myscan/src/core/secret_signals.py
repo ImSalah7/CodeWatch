@@ -36,6 +36,9 @@ LITERAL_KEYWORDS: frozenset[str] = frozenset(
         "empty", "default", "n/a", "na", "unknown", "self", "cls",
         "length", "size", "count", "existing", "settings", "config",
         "password", "secret", "key", "token", "value",
+        # Auth scheme / header names used as placeholder values.
+        "bearer", "basic", "digest", "authorization", "authentication",
+        "session", "cookie", "csrf", "grant_type", "client_id",
     }
 )
 
@@ -171,7 +174,9 @@ def is_common_word_value(value: str) -> bool:
     if v in PLACEHOLDER_KEYWORDS or v in LITERAL_KEYWORDS:
         return True
     m = _COMMON_WORD_PLUS_DIGITS.match(v)
-    return bool(m and m.group(1) in PLACEHOLDER_KEYWORDS)
+    if not m:
+        return False
+    return m.group(1) in PLACEHOLDER_KEYWORDS or m.group(1) in LITERAL_KEYWORDS
 
 
 # ---------------------------------------------------------------------------
@@ -276,6 +281,31 @@ def looks_like_prose(value: str) -> bool:
     if len(tokens) < 3:
         return False
     return all(re.fullmatch(r"[a-z]{2,}|\d{1,4}", t) for t in tokens)
+
+
+def _is_camel_word_token(token: str) -> bool:
+    if not token:
+        return False
+    if not any(c.isalpha() for c in token):
+        return len(token) <= 2
+    if len(token) < 3:
+        return False
+    if any(c in token for c in "!@#$%^&*()_+-=[]{}|;:,.<>?/`~\\"):
+        return False
+    return sum(1 for c in token if c.isdigit()) <= 2
+
+
+def looks_like_camel_prose(value: str) -> bool:
+    """Detect demo values that read as a concatenation of recognizable words
+    (e.g. `SomeLongSecretTokenValueHere`, `ApiKeyForProductionEnv`).
+
+    Real credentials are effectively never 4+ clean word tokens glued together;
+    random strings split into short, single-character fragments instead.
+    """
+    if len(value) < 12 or not re.fullmatch(r"[A-Za-z0-9]+", value):
+        return False
+    tokens = split_tokens(value)
+    return len(tokens) >= 4 and all(_is_camel_word_token(t) for t in tokens)
 
 
 def has_uniform_charset(value: str) -> bool:
@@ -395,6 +425,7 @@ def jwt_algorithm(value: str) -> str | None:
 
 _KNOWN_PREFIXES: tuple[tuple[re.Pattern[str], str], ...] = (
     (re.compile(r"^AKIA[0-9A-Z]{16}$"), "AWS Access Key ID"),
+    (re.compile(r"^ASIA[0-9A-Z]{16}$"), "AWS Temporary Access Key ID"),
     (re.compile(r"^ghp_[A-Za-z0-9]{36}$"), "GitHub Personal Access Token"),
     (re.compile(r"^gho_[A-Za-z0-9]{36}$"), "GitHub OAuth Token"),
     (re.compile(r"^ghu_[A-Za-z0-9]{36}$"), "GitHub App Token (user)"),
@@ -412,6 +443,8 @@ _KNOWN_PREFIXES: tuple[tuple[re.Pattern[str], str], ...] = (
     (re.compile(r"^SG\.[A-Za-z0-9\-_]{22}\.[A-Za-z0-9\-_]{43}$"), "SendGrid API Key"),
     (re.compile(r"^xox[bpoa]-[0-9]{10,13}-[a-zA-Z0-9-]+$"), "Slack Token"),
     (re.compile(r"^\d{8,10}:[A-Za-z0-9_-]{35}$"), "Telegram Bot Token"),
+    (re.compile(r"^GOCSPX-[A-Za-z0-9_-]{28}$"), "Google OAuth Client Secret"),
+    (re.compile(r"^dop_v1_[a-f0-9]{64}$"), "DigitalOcean Personal Access Token"),
     (re.compile(r"^-----BEGIN (?:RSA |EC |DSA |OPENSSH )?PRIVATE KEY-----"), "Private Key"),
 )
 
@@ -484,7 +517,8 @@ class SecretSignalScore:
 
 _STRONG_FORMAT_HINTS: tuple[str, ...] = (
     "aws_access", "aws_secret", "github_token", "github_oauth", "github_app",
-    "slack_token", "slack_webhook", "google_api", "stripe", "heroku",
+    "github_url", "slack_token", "slack_webhook", "google_api", "google_oauth",
+    "stripe", "heroku", "digitalocean",
     "npm_token", "sendgrid", "telegram", "fine_grained", "gitlab",
     "anthropic", "huggingface", "pypi", "azure_account", "azure_key",
     "deploy_key", "bearer", "basic_auth", "hard_coded_secret", "jwt_secret",
@@ -573,6 +607,10 @@ def score_secret(
         if looks_like_prose(v):
             return SecretSignalScore(
                 reject_reason="value reads like a prose/identifier of common words, not a credential"
+            )
+        if looks_like_camel_prose(v):
+            return SecretSignalScore(
+                reject_reason="value is a concatenation of words, not a real credential"
             )
 
     if rule_kind in ("generic_key", "password", "high_entropy") and is_common_word_value(v):

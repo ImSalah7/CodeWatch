@@ -162,8 +162,29 @@ class TestApplySeverityGate:
             reasoning="existing explanation",
         )
         apply_severity_gate(f)
-        assert f.confidence_reasoning.startswith("Severity HIGH demoted")
+        assert "Confidence capped at 0.60" in f.confidence_reasoning
+        assert "Severity HIGH demoted" in f.confidence_reasoning
         assert "existing explanation" in f.confidence_reasoning
+
+
+class TestConfidenceCap:
+    def test_regex_only_confidence_capped(self):
+        f = _finding(severity=Severity.MEDIUM, confidence=0.85, evidence=REGEX_ONLY_EVIDENCE)
+        changed = apply_severity_gate(f)
+        assert changed is True
+        assert f.confidence <= 0.60
+
+    def test_strong_evidence_confidence_not_capped(self):
+        f = _finding(severity=Severity.HIGH, confidence=0.9, evidence=STRONG_SECRET_EVIDENCE)
+        apply_severity_gate(f)
+        assert f.confidence == 0.9
+        assert f.severity == Severity.HIGH
+
+    def test_already_capped_not_flagged_changed(self):
+        f = _finding(severity=Severity.MEDIUM, confidence=0.5, evidence=REGEX_ONLY_EVIDENCE)
+        changed = apply_severity_gate(f)
+        assert changed is False
+        assert f.confidence == 0.5
 
 
 class TestScanResultGating:
