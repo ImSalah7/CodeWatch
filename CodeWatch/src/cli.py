@@ -40,7 +40,7 @@ def _prepare_target(target: str, quiet: bool = False) -> tuple[str, bool]:
     target = target.rstrip(".")
     parsed = urlparse(target)
     if parsed.scheme in ("http", "https") and "github.com" in parsed.netloc:
-        temp_dir = tempfile.mkdtemp(prefix="myscan_")
+        temp_dir = tempfile.mkdtemp(prefix="codewatch_")
         try:
             if not quiet:
                 console.print(f"[yellow]Cloning {target}...[/yellow]")
@@ -131,15 +131,22 @@ def scan(target, output, fmt, local, no_deps, no_quality, include_info, no_secre
 
         engine = ScanEngine(config, enterprise_mode=enterprise)
 
-        with Progress(
-            SpinnerColumn(),
-            TextColumn("[progress.description]{task.description}"),
-            BarColumn(),
-            console=console,
-        ) as progress:
-            task = progress.add_task("Scanning...", total=None)
-            result = engine.scan(local_path)
-            progress.update(task, completed=True)
+        try:
+            with Progress(
+                SpinnerColumn(),
+                TextColumn("[progress.description]{task.description}"),
+                BarColumn(),
+                console=console,
+            ) as progress:
+                task = progress.add_task("Scanning...", total=None)
+                result = engine.scan(local_path)
+                progress.update(task, completed=True)
+        except FileNotFoundError as e:
+            console.print(f"[bold red]Error:[/bold red] {e}")
+            sys.exit(1)
+        except Exception as e:
+            console.print(f"[bold red]Scan error:[/bold red] {e}")
+            sys.exit(1)
 
         from .core.secret_display import apply_secret_display_mode
         apply_secret_display_mode(result.findings, display_config.mode)
@@ -170,7 +177,14 @@ def quick(target, no_deps, severity):
     try:
         config = ScanConfig(target=local_path, local=Path(local_path).exists(), skip_deps=no_deps, severity_threshold=severity)
         engine = ScanEngine(config)
-        result = engine.scan(local_path)
+        try:
+            result = engine.scan(local_path)
+        except FileNotFoundError as e:
+            console.print(f"[bold red]Error:[/bold red] {e}")
+            sys.exit(1)
+        except Exception as e:
+            console.print(f"[bold red]Scan error:[/bold red] {e}")
+            sys.exit(1)
 
         critical_high = [f for f in result.security_findings if f.severity.value in ("critical", "high")]
 
