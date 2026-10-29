@@ -1,0 +1,38 @@
+# Python
+__pycache__/
+*.pyc
+*.pyo
+*.egg-info/
+dist/
+build/
+.mypy_cache/
+.pytest_cache/
+*.egg
+.venv/
+venv/
+
+# Runtime state
+myscan.db
+codewatch.db
+*.db
+*.db-journal
+myscan_settings.json
+codewatch_settings.json
+myscan_reports/
+codewatch_reports/
+e2e_report.json
+
+# Environment
+.env
+.env.local
+
+# Node / frontend
+node_modules/
+**/node_modules/
+**/.next/
+frontend/out/
+
+# Logs / misc
+*.log
+.DS_Store
+Thumbs.db
