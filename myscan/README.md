@@ -83,7 +83,7 @@ Or install as a package:
 
 ```bash
 pip install -e .
-CodeWatch v3.0.1
+codewatch --help
 ```
 
 ### Frontend (web UI)
@@ -102,24 +102,24 @@ The frontend proxies `/api/*` to the backend (default `http://localhost:8443`, o
 
 ```bash
 # Full scan
-myscan scan <target> [-o report.md] [-f markdown|json|sarif|html|csv]
+codewatch scan <target> [-o report.md] [-f markdown|json|sarif|html|csv]
 
 # Enterprise analysis (AST, data flow, taint tracking)
-myscan scan <target> --enterprise
+codewatch scan <target> --enterprise
 
 # Quick risk summary (critical/high only)
-myscan quick <target>
+codewatch quick <target>
 
 # Rules, languages, severity weights
-myscan info
+codewatch info
 
 # Compare against Semgrep / Bandit
-myscan benchmark <target> [--tools semgrep,bandit]
+codewatch benchmark <target> [--tools semgrep,bandit]
 ```
 
 Common options for `scan`: `--no-security`, `--no-quality`, `--no-secrets`, `--no-deps`, `--include-tests`, `--include-docs`, `--threads N`, `--severity LEVEL`, `--secret-display full|masked|smart`, `--show-secrets`.
 
-`<target>` can be a local path or a remote git URL (cloned shallowly; SSRF-guarded). Run `myscan scan --help` for the full list.
+`<target>` can be a local path or a remote git URL (cloned shallowly; SSRF-guarded). Run `codewatch scan --help` for the full list.
 
 ## Web UI
 
