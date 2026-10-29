@@ -61,7 +61,7 @@ lsof -i :8443
 ### Database errors
 
 - SQLite uses WAL — keep `.db`, `-wal`, `-shm` together.
-- If the file is corrupt: restore from backup, or move it aside (`myscan.db` is regenerated empty) and re-run scans.
+- If the file is corrupt: restore from backup, or move it aside (`codewatch.db` is regenerated empty) and re-run scans.
 - Schema migrations are additive and run automatically (`_migrate`) on first request.
 
 ### Missing optional features (tree-sitter, waitress)

@@ -16,7 +16,7 @@ CodeWatch is a three-surface application: a **web UI**, a **CLI**, and a **REST 
                     └───────────────────┬─────────────────────────┘
                                         │ HTTP / SSE
    Terminal                             ▼
-   ───────────────►  CLI (myscan)  ┌─────────────────────────────────────────────┐
+   ───────────────►  CLI (codewatch)  ┌─────────────────────────────────────────────┐
    CI pipeline                      │  Flask REST API + SSE  (port 8443)          │
                                     │  api.py · security.py · store.py · progress │
                                     │  auth · rate limit · CORS · SSRF guards     │

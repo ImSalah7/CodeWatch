@@ -10,13 +10,13 @@ services:
       - MYSCAN_RATE_LIMIT_BURST=${MYSCAN_RATE_LIMIT_BURST:-60}
       - MYSCAN_CORS_ORIGINS=${MYSCAN_CORS_ORIGINS:-http://localhost:3000,http://127.0.0.1:3000}
       - MYSCAN_ALLOWED_PATHS=${MYSCAN_ALLOWED_PATHS:-/data/targets}
-      - MYSCAN_DB=${MYSCAN_DB:-/data/myscan.db}
+      - MYSCAN_DB=${MYSCAN_DB:-/data/codewatch.db}
       - MYSCAN_TRUST_PROXY=${MYSCAN_TRUST_PROXY:-0}
       - OPENAI_API_KEY=${OPENAI_API_KEY:-}
       - ANTHROPIC_API_KEY=${ANTHROPIC_API_KEY:-}
       - MYSCAN_AI_PROVIDER=${MYSCAN_AI_PROVIDER:-openai}
     volumes:
-      - myscan_data:/data
+      - codewatch_data:/data
     restart: unless-stopped
 
   frontend:
@@ -32,4 +32,4 @@ services:
     restart: unless-stopped
 
 volumes:
-  myscan_data:
+  codewatch_data:

@@ -6,14 +6,14 @@ CodeWatch's test suite covers the scanner core, security analyzers, API, and CLI
 
 | Layer | Location | Framework |
 |---|---|---|
-| Backend (unit + integration) | `myscan/tests/` | `pytest` |
-| Frontend (lint + build) | `myscan/frontend/` | ESLint (Next config) + `next build` |
-| Docs sync | `myscan/scripts/check_docs_sync.py` | standalone script |
+| Backend (unit + integration) | `CodeWatch/tests/` | `pytest` |
+| Frontend (lint + build) | `CodeWatch/frontend/` | ESLint (Next config) + `next build` |
+| Docs sync | `CodeWatch/scripts/check_docs_sync.py` | standalone script |
 
 ## 2. Running the backend tests
 
 ```bash
-cd myscan
+cd CodeWatch
 python -m venv .venv && source .venv/bin/activate   # Windows: .venv\Scripts\activate
 pip install -r requirements.txt
 

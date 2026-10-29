@@ -53,7 +53,7 @@ cd frontend && npm run start -- -p 3000
 
 ## 5. Backups
 
-The only state is the SQLite database (default `src/myscan.db`, or `/data/myscan.db` in Docker). Back it up with SQLite's online backup or by copying `.db` + `-wal` + `-shm` together while the API is stopped. See [deployment.md](deployment.md) §6.
+The only state is the SQLite database (default `src/codewatch.db`, or `/data/codewatch.db` in Docker). Back it up with SQLite's online backup or by copying `.db` + `-wal` + `-shm` together while the API is stopped. See [deployment.md](deployment.md) §6.
 
 ## 6. Upgrading
 
@@ -69,7 +69,7 @@ Admin-relevant environment variables — full list in [security.md](security.md)
 | Variable | Default | Admin purpose |
 |---|---|---|
 | `MYSCAN_HOST` / `MYSCAN_PORT` | `0.0.0.0` / `8443` | API bind |
-| `MYSCAN_DB` | `src/myscan.db` | Database location |
+| `MYSCAN_DB` | `src/codewatch.db` | Database location |
 | `MYSCAN_RATE_LIMIT` / `MYSCAN_RATE_LIMIT_BURST` | `300` / `60` | DoS protection |
 | `MYSCAN_ALLOWED_PATHS` | *(empty)* | Which paths can be scanned |
 | `MYSCAN_CORS_ORIGINS` | *(empty)* | Browser origin allowlist |

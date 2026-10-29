@@ -151,7 +151,7 @@ def scan(target, output, fmt, local, no_deps, no_quality, include_info, no_secre
             output_path = Path(output)
             _save_report(result, output_path, fmt)
         else:
-            report_dir = Path("myscan_reports")
+            report_dir = Path("codewatch_reports")
             report_dir.mkdir(exist_ok=True)
             ts = time.strftime("%Y%m%d_%H%M%S")
             _save_report(result, report_dir / f"report_{ts}", fmt)

@@ -8,6 +8,9 @@ on:
 jobs:
   test:
     runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: CodeWatch
     strategy:
       matrix:
         python-version: ["3.11", "3.12"]
@@ -18,6 +21,7 @@ jobs:
         with:
           python-version: ${{ matrix.python-version }}
           cache: pip
+          cache-dependency-path: CodeWatch/requirements.txt
 
       - name: Install dependencies
         run: |
@@ -32,6 +36,9 @@ jobs:
 
   lint:
     runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: CodeWatch
     steps:
       - uses: actions/checkout@v4
 
@@ -39,6 +46,7 @@ jobs:
         with:
           python-version: "3.12"
           cache: pip
+          cache-dependency-path: CodeWatch/requirements.txt
 
       - name: Install lint tools
         run: |
@@ -55,7 +63,7 @@ jobs:
     runs-on: ubuntu-latest
     defaults:
       run:
-        working-directory: frontend
+        working-directory: CodeWatch/frontend
     steps:
       - uses: actions/checkout@v4
 
@@ -63,7 +71,7 @@ jobs:
         with:
           node-version: 22
           cache: npm
-          cache-dependency-path: frontend/package-lock.json
+          cache-dependency-path: CodeWatch/frontend/package-lock.json
 
       - name: Install dependencies
         run: npm ci

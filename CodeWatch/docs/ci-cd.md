@@ -74,7 +74,7 @@ Image publish on version tags is the intended release path:
           password: ${{ secrets.GITHUB_TOKEN }}
       - uses: docker/build-push-action@v6
         with:
-          context: myscan
+          context: CodeWatch
           push: true
           tags: ghcr.io/${{ github.repository }}/api:latest,ghcr.io/${{ github.repository }}/api:${{ github.ref_name }}
 ```

@@ -9,7 +9,7 @@
 - Installs `requirements.txt` (`--no-cache-dir`), then `pip install -e .` (needs `pyproject.toml`, `src/`, `run_api.py`, `README.md`)
 - `EXPOSE 8443`, `CMD ["python", "run_api.py"]` → waitress (16 threads), falls back to the Flask dev server
 
-### Frontend (`myscan/frontend/Dockerfile`)
+### Frontend (`CodeWatch/frontend/Dockerfile`)
 
 Two-stage:
 
@@ -29,7 +29,7 @@ services:
       MYSCAN_RATE_LIMIT_BURST: ${MYSCAN_RATE_LIMIT_BURST:-60}
       MYSCAN_CORS_ORIGINS: ${MYSCAN_CORS_ORIGINS:-http://localhost:3000,http://127.0.0.1:3000}
       MYSCAN_ALLOWED_PATHS: ${MYSCAN_ALLOWED_PATHS:-/data/targets}
-      MYSCAN_DB: /data/myscan.db
+      MYSCAN_DB: /data/codewatch.db
       MYSCAN_TRUST_PROXY: "0"
       OPENAI_API_KEY: ${OPENAI_API_KEY:-}
       ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY:-}
@@ -53,7 +53,7 @@ volumes:
 
 Notes:
 
-- `MYSCAN_DB=/data/myscan.db` persists on the `myscan_data` named volume.
+- `MYSCAN_DB=/data/codewatch.db` persists on the `myscan_data` named volume.
 - `MYSCAN_ALLOWED_PATHS` defaults to `/data/targets` in Compose — mount or copy repositories there so they can be scanned.
 - The frontend injects `MYSCAN_API_KEY` into proxied API requests server-side.
 
@@ -81,7 +81,7 @@ docker compose down -v
 
 | Path in container | Purpose |
 |---|---|
-| `/data/myscan.db` | SQLite database (WAL; keep `-wal`/`-shm` alongside for backups) |
+| `/data/codewatch.db` | SQLite database (WAL; keep `-wal`/`-shm` alongside for backups) |
 | `/data/targets` | Default scan root (override with `MYSCAN_ALLOWED_PATHS`) |
 
 Backup the volume with:
@@ -98,7 +98,7 @@ docker run --rm -v myscan_data:/data -v "$PWD":/backup alpine tar czf /backup/my
 | `MYSCAN_RATE_LIMIT` / `MYSCAN_RATE_LIMIT_BURST` | 300 / 60 | security.md |
 | `MYSCAN_CORS_ORIGINS` | `http://localhost:3000,…` | security.md |
 | `MYSCAN_ALLOWED_PATHS` | `/data/targets` | security.md |
-| `MYSCAN_DB` | `/data/myscan.db` | [database-schema.md](database-schema.md) |
+| `MYSCAN_DB` | `/data/codewatch.db` | [database-schema.md](database-schema.md) |
 | `MYSCAN_TRUST_PROXY` | 0 | security.md |
 | `OPENAI_API_KEY` / `ANTHROPIC_API_KEY` / `MYSCAN_AI_PROVIDER` | empty | [TRD.md](TRD.md) §9 |
 | `API_BASE_URL` | `http://api:8443` | frontend proxy |

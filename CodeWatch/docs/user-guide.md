@@ -3,7 +3,7 @@
 ## 1. Quick start
 
 ```bash
-cd myscan
+cd CodeWatch
 python -m venv .venv && source .venv/bin/activate   # Windows: .venv\Scripts\activate
 pip install -r requirements.txt
 
@@ -94,7 +94,7 @@ python -m src.cli --version
 
 ## 5. Reports
 
-Generated reports land in `myscan_reports/` when `-o` is omitted. All formats share one content model: findings (severity, CWE, OWASP, CVSS, location, evidence, fix), plus metadata (version, branch, commit, rule counts, total/occurrences).
+Generated reports land in `codewatch_reports/` when `-o` is omitted. All formats share one content model: findings (severity, CWE, OWASP, CVSS, location, evidence, fix), plus metadata (version, branch, commit, rule counts, total/occurrences).
 
 | Format | Use |
 |---|---|

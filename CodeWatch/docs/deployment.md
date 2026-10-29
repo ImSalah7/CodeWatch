@@ -13,7 +13,7 @@
 Prerequisites: Docker Engine 20.10+ with Compose v2.
 
 ```bash
-cd myscan
+cd CodeWatch
 cp .env.example .env
 # Edit .env: set MYSCAN_API_KEY, MYSCAN_ALLOWED_PATHS, provider keys as needed
 docker compose up --build -d
@@ -22,7 +22,7 @@ docker compose ps
 
 Services:
 
-- **api** → `http://<host>:8443` (waitress; SQLite on the `myscan_data` volume at `/data/myscan.db`)
+- **api** → `http://<host>:8443` (waitress; SQLite on the `myscan_data` volume at `/data/codewatch.db`)
 - **frontend** → `http://<host>:3000` (Next.js; proxies `/api/*` to `api:8443`)
 
 Stop / logs:
@@ -123,10 +123,10 @@ server {
 
 ## 6. Data & persistence
 
-- SQLite database: default `src/myscan.db`; in Docker at `/data/myscan.db` (named volume `myscan_data`).
+- SQLite database: default `src/codewatch.db`; in Docker at `/data/codewatch.db` (named volume `myscan_data`).
 - Backups: stop the API (or copy with SQLite's online backup) and copy the `.db`, `-wal`, and `-shm` files together.
 - Retention: `max_history` setting prunes old scans; the in-memory job cache is capped at 200.
-- Reports written by the CLI go to `myscan_reports/` (local) — gitignored.
+- Reports written by the CLI go to `codewatch_reports/` (local) — gitignored.
 
 ## 7. Hardening checklist
 

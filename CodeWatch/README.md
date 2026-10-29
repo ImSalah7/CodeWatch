@@ -51,7 +51,7 @@ CodeWatch scans local and remote (git) repositories with a multi-layered analysi
 
 ```
 ┌─────────────────────────────┐     ┌──────────────────────────────┐
-│  Next.js web UI (:3000)     │     │  CLI  (myscan ...)            │
+│  Next.js web UI (:3000)     │     │  CLI  (codewatch ...)            │
 │  proxy.ts injects API key   │     └──────────────┬───────────────┘
 └──────────────┬──────────────┘                    │
                │ /api/*, /health                   │ direct
@@ -73,7 +73,7 @@ CodeWatch scans local and remote (git) repositories with a multi-layered analysi
 ### Backend (API)
 
 ```bash
-cd myscan
+cd CodeWatch
 python -m venv .venv && .venv\Scripts\activate     # Windows
 python -m pip install -r requirements.txt
 python run_api.py                                   # serves on :8443 (waitress)
@@ -135,12 +135,12 @@ Common options for `scan`: `--no-security`, `--no-quality`, `--no-secrets`, `--n
 ## Docker
 
 ```bash
-cd myscan
+cd CodeWatch
 cp .env.example .env            # set MYSCAN_API_KEY, provider keys
 docker compose up --build -d
 ```
 
-- **api** → `http://localhost:8443` (waitress, SQLite on the `myscan_data` volume)
+- **api** → `http://localhost:8443` (waitress, SQLite on the `codewatch_data` volume)
 - **frontend** → `http://localhost:3000`
 
 See [docs/docker.md](docs/docker.md) for details and [docs/deployment.md](docs/deployment.md) for production guidance.
@@ -158,7 +158,7 @@ All configuration is environment-driven. Key variables (full list in [.env.examp
 | `MYSCAN_CORS_ORIGINS` | *(empty)* | Comma-separated allowed origins |
 | `MYSCAN_ALLOWED_PATHS` | *(empty)* | Semicolon-separated local scan allowlist |
 | `MYSCAN_TRUST_PROXY` | `0` | Trust `X-Forwarded-For` when behind a proxy |
-| `MYSCAN_DB` | `src/myscan.db` | SQLite database path |
+| `MYSCAN_DB` | `src/codewatch.db` | SQLite database path |
 | `MYSCAN_LLM_ENHANCE` | `1` | Enable/disable LLM enrichment |
 | `OPENAI_API_KEY` / `ANTHROPIC_API_KEY` / `GOOGLE_API_KEY` | — | LLM provider keys |
 | `API_BASE_URL` | `http://localhost:8443` | Frontend → backend base URL (frontend proxy) |
@@ -166,7 +166,7 @@ All configuration is environment-driven. Key variables (full list in [.env.examp
 ## Project structure
 
 ```
-myscan/
+CodeWatch/
 ├── run_api.py            # Production entry point (waitress)
 ├── pyproject.toml        # Package metadata, deps, pytest/ruff/mypy config
 ├── requirements.txt      # Pinned runtime requirements (Docker/CI)
@@ -186,7 +186,7 @@ myscan/
 │   ├── scanners/         # security / quality / secrets scanners
 │   ├── reporters/        # markdown · html · json · sarif · csv
 │   ├── ai/               # LLM client, enhancer, explainer
-│   └── myscan.db         # Default SQLite database (see MYSCAN_DB)
+│   └── codewatch.db         # Default SQLite database (see MYSCAN_DB)
 ├── frontend/             # Next.js 16 web UI
 │   ├── src/app/          # Routes (dashboard, scan, results, reports, …)
 │   ├── src/components/   # Page-level client components

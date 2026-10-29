@@ -25,7 +25,7 @@ myscan/
 │   ├── serialization.py            # result_from_dict / finding_from_dict (DB → models round-trip)
 │   ├── progress.py                 # ProgressTracker + SSE event fan-out queue
 │   ├── myscan_settings.json        # Persisted settings (auto-created)
-│   ├── myscan.db                   # Default SQLite database (path via MYSCAN_DB)
+│   ├── codewatch.db                   # Default SQLite database (path via MYSCAN_DB)
 │   ├── ai/
 │   │   ├── llm_client.py           # OpenAI/Anthropic/Gemini client factory
 │   │   ├── enhancer.py             # Parallel finding enrichment (cached, non-fatal)
@@ -62,7 +62,7 @@ myscan/
 │   └── check_docs_sync.py          # Docs↔code consistency checker (CI + local)
 ├── tests/                          # 574 tests (see docs/testing.md)
 │   └── fixtures/sample_app/app.py  # Deliberately vulnerable Flask app used by integration tests
-└── myscan_reports/                 # Report output (gitignored)
+└── codewatch_reports/                 # Report output (gitignored)
 ```
 
 ### `src/core/` inventory

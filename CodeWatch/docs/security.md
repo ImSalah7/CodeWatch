@@ -28,7 +28,7 @@ CodeWatch is a self-hosted scanner. Primary threats considered:
 | `MYSCAN_ALLOWED_PATHS` | *(empty)* | Semicolon-separated local directories that may be scanned |
 | `MYSCAN_TRUST_PROXY` | `0` | Set `1` to derive client identity from `X-Forwarded-For` |
 | `MYSCAN_HOST` / `MYSCAN_PORT` | `0.0.0.0` / `8443` | Bind address / port |
-| `MYSCAN_DB` | `src/myscan.db` | SQLite path |
+| `MYSCAN_DB` | `src/codewatch.db` | SQLite path |
 | `MYSCAN_LLM_ENHANCE` | `1` | LLM enrichment toggle (`0` = off) |
 | `MYSCAN_LLM_MAX_FINDINGS` | `20` | Max LLM-enriched findings per scan |
 | `MYSCAN_LLM_TIMEOUT` | `30` | Per-finding LLM timeout (s) |

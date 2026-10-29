@@ -13,7 +13,7 @@ This document specifies the technical requirements and constraints for CodeWatch
 | Language | Python | `>= 3.11` |
 | Web framework | Flask | `>= 3.0` |
 | WSGI server | waitress | `>= 3.0` (threads=16, channel_timeout=600) |
-| Database | SQLite | WAL mode; file path via `MYSCAN_DB` (default `src/myscan.db`) |
+| Database | SQLite | WAL mode; file path via `MYSCAN_DB` (default `src/codewatch.db`) |
 | Parsing | tree-sitter `>=0.21` + 9 language grammars | Python, JS, TS, Java, Go, PHP, C/C++, C#, Rust, Ruby |
 | Graph analysis | networkx `>=3.2` | call graph, reachability |
 | Serialization | orjson `>=3.9` | fast JSON |
@@ -28,12 +28,12 @@ This document specifies the technical requirements and constraints for CodeWatch
 ### 3.1 Backend entry points
 
 - `python run_api.py` — production server. Reads `MYSCAN_HOST` (default `0.0.0.0`), `MYSCAN_PORT` (default `8443`), `MYSCAN_DEBUG`. Prefers waitress; falls back to Flask dev server.
-- `myscan` console script (from `src/cli.py`): subcommands `scan`, `quick`, `info`, `benchmark`.
+- `codewatch` console script (from `src/cli.py`): subcommands `scan`, `quick`, `info`, `benchmark`.
 - `src.api.create_app(config=None)` — programmatic Flask app factory (ensures settings file + `store.init_store()`).
 
 ### 3.2 Database
 
-- SQLite at `MYSCAN_DB` or `src/myscan.db`; `PRAGMA journal_mode=WAL`; parent directory auto-created.
+- SQLite at `MYSCAN_DB` or `src/codewatch.db`; `PRAGMA journal_mode=WAL`; parent directory auto-created.
 - Tables: `scans`, `findings`, `finding_state` (see [database-schema.md](database-schema.md)).
 - Additive schema migrations via `_migrate(conn)` using `PRAGMA table_info` checks (no migration framework).
 
