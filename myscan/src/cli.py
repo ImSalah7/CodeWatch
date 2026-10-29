@@ -1,4 +1,4 @@
-"""MyScan CLI - Enterprise SAST Platform."""
+"""CodeWatch CLI - Enterprise SAST Platform."""
 
 from __future__ import annotations
 
@@ -58,9 +58,9 @@ def _prepare_target(target: str, quiet: bool = False) -> tuple[str, bool]:
 
 
 @click.group()
-@click.version_option(version=__version__, prog_name="MyScan")
+@click.version_option(version=__version__, prog_name="CodeWatch")
 def cli():
-    """MyScan - Enterprise AI-Powered SAST Platform"""
+    """CodeWatch - Enterprise AI-Powered SAST Platform"""
 
 
 @cli.command()
@@ -119,7 +119,7 @@ def scan(target, output, fmt, local, no_deps, no_quality, include_info, no_secre
             threads=threads,
         )
 
-        mode_label = f"[bold cyan]MyScan v{__version__} Enterprise[/bold cyan]" if enterprise else f"[bold cyan]MyScan v{__version__}[/bold cyan]"
+        mode_label = f"[bold cyan]CodeWatch v{__version__}[/bold cyan]" if enterprise else f"[bold cyan]CodeWatch v{__version__}[/bold cyan]"
         console.print(Panel(f"{mode_label} - Enterprise SAST Platform", style="blue"))
         console.print(f"Target: [green]{target}[/green]")
         if enterprise:
@@ -195,7 +195,7 @@ def info():
     """Show scanner information."""
     from .core.rules import ALL_RULES
 
-    console.print(Panel(f"[bold cyan]MyScan v{__version__}[/bold cyan]", style="blue"))
+    console.print(Panel(f"[bold cyan]CodeWatch v{__version__}[/bold cyan]", style="blue"))
 
     table = Table(title="Scanner Modules")
     table.add_column("Module", style="bold")
@@ -234,7 +234,7 @@ def _print_results(result):
     risk_color = "green" if result.risk_score < 15 else "yellow" if result.risk_score < 30 else "red"
 
     console.print()
-    console.rule("[bold]MyScan Results[/bold]")
+    console.rule("[bold]CodeWatch Results[/bold]")
     console.print(f"\n[{risk_color} bold]Risk Score: {result.risk_score}/100 | Grade: {result.grade}[/{risk_color} bold]\n")
 
     table = Table(title="Findings by Severity")
@@ -349,7 +349,7 @@ def run_scan(target: str, local: bool = False, use_ai: bool = False, skip_deps: 
               help="Comma-separated list of external tools to compare")
 @click.option("-o", "--output", help="Output file path for benchmark results")
 def benchmark(target, enterprise, tools, output):
-    """Compare MyScan against other SAST tools (semgrep, bandit)."""
+    """Compare CodeWatch against other SAST tools (semgrep, bandit)."""
     from .core.benchmark import run_benchmark
 
     tool_list = [t.strip() for t in tools.split(",") if t.strip()]
@@ -363,7 +363,7 @@ def benchmark(target, enterprise, tools, output):
 
     ms = result.myscan_result
     if ms:
-        console.print(f"[bold green]MyScan:[/bold green] {ms.finding_count} findings in {ms.scan_duration:.1f}s ({ms.file_count} files)")
+        console.print(f"[bold green]CodeWatch:[/bold green] {ms.finding_count} findings in {ms.scan_duration:.1f}s ({ms.file_count} files)")
         if ms.error:
             console.print(f"  [red]Error: {ms.error}[/red]")
 
@@ -382,7 +382,7 @@ def benchmark(target, enterprise, tools, output):
 
         metric_rows = [
             ("Overlap", "overlap"),
-            ("Unique to MyScan", "unique_to_myscan"),
+            ("Unique to CodeWatch", "unique_to_myscan"),
             ("Unique to External", "unique_to_external"),
             ("Est. Precision", "estimated_precision"),
             ("Est. Recall", "estimated_recall"),

@@ -291,6 +291,10 @@ class ScanResult:
         return [f for f in self.findings if f.category == FindingCategory.SECRET]
 
     @property
+    def dependency_findings(self) -> list[Finding]:
+        return [f for f in self.findings if f.category == FindingCategory.DEPENDENCY]
+
+    @property
     def severity_counts(self) -> dict[str, int]:
         counts = {"critical": 0, "high": 0, "medium": 0, "low": 0, "info": 0}
         for f in self.findings:
@@ -303,7 +307,11 @@ class ScanResult:
         for f in self.findings:
             if f.is_false_positive or f.likely_false_positive:
                 continue
-            if f.category not in (FindingCategory.SECURITY, FindingCategory.SECRET):
+            if f.category not in (
+                FindingCategory.SECURITY,
+                FindingCategory.SECRET,
+                FindingCategory.DEPENDENCY,
+            ):
                 continue
             score += f.severity.weight * f.confidence
         return min(int(score), 100)
@@ -453,6 +461,7 @@ class ScanResult:
                 "security_findings": len(self.security_findings),
                 "quality_findings": len(self.quality_findings),
                 "secret_findings": len(self.secret_findings),
+                "dependency_findings": len(self.dependency_findings),
                 "risk_score": self.risk_score,
                 "grade": self.grade,
                 "severity_counts": self.severity_counts,

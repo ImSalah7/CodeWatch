@@ -229,6 +229,20 @@ class TestSmartMode:
         assert "****" in value
         assert value != "AKIAIOSFODNN7ZYZX"
 
+    def test_smart_masks_test_credential_despite_context_markers(self):
+        raw = "sk_test_51H8kLmN4pQrT7vWxY2zA5bC9dEfGhJk"
+        finding = _make_secret_finding(
+            raw,
+            rule_id="SEC_STRIPE_KEY_TEST",
+            tags=["secret", "stripe_key_test"],
+            snippet=f'STRIPE_API_KEY = "{raw}"  // synthetic test credential',
+        )
+
+        value = get_secret_display_value(finding, SecretDisplayMode.SMART)
+
+        assert value != raw
+        assert "sk_test_51H8kLmN4pQrT7vWxY2zA5bC9dEfGhJk" not in value
+
     def test_smart_masks_high_entropy(self):
         finding = _make_secret_finding(
             "xK9mP2vL8nQ4wR7jB3hY6tF5gD1sA0cE",
@@ -401,6 +415,23 @@ class TestJSONReporterIntegration:
         assert report["secretDisplayMode"] == "full"
         secret_finding = report["findings"][0]
         assert secret_finding["rawSecret"] == "admin"
+
+    def test_json_omits_raw_secret_unless_full_display_is_enabled(self):
+        from src.reporters.json_report import JSONReporter
+
+        for mode in ("smart", "masked"):
+            finding = _make_secret_finding(
+                "synthetic_dummy_credential_7Hq2K9vP4xL8",
+                tags=["secret", "generic_api_key"],
+            )
+            result = ScanResult()
+            result.findings = [finding]
+            result._secret_display_mode = mode
+
+            report = json.loads(JSONReporter().generate(result))
+
+            assert report["secretDisplayMode"] == mode
+            assert "rawSecret" not in report["findings"][0]
 
     def test_json_includes_display_mode(self):
         result = ScanResult()

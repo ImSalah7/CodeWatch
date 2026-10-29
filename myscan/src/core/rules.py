@@ -136,7 +136,7 @@ def _build_rules() -> list[Rule]:
       "Use os.path.realpath() and verify the path starts with the expected base directory.",
       ["https://cwe.mitre.org/data/definitions/22.html"],
       "Read arbitrary files including credentials, source code, and system files.",
-      pattern=r'open\s*\([^)]*(?:request|input|args|params|argv)',
+      pattern=r'\bopen\s*\([^)]*\b(?:request|input|args|params|argv)\b',
       cvss={"attack_vector": "N", "attack_complexity": "L", "privileges": "N", "user_interaction": "N", "scope": "U", "confidentiality": "H", "integrity": "N", "availability": "N"})
 
     r("SEC009", "Server-Side Request Forgery (SSRF)",
@@ -179,7 +179,7 @@ def _build_rules() -> list[Rule]:
       "Never disable SSL verification in production. Configure proper CA certificates.",
       ["https://cwe.mitre.org/data/definitions/295.html"],
       "Attackers can intercept, modify, and replay all HTTPS traffic.",
-      pattern=r'verify\s*=\s*False|SSL_VERIFY\s*=\s*false|InsecureRequestWarning|CHECK_CERT_HOSTNAME\s*=\s*false',
+      pattern=r'\bverify\s*=\s*False|SSL_VERIFY\s*=\s*false|CHECK_CERT_HOSTNAME\s*=\s*false',
       cvss={"attack_vector": "A", "attack_complexity": "L", "privileges": "N", "user_interaction": "N", "scope": "U", "confidentiality": "H", "integrity": "H", "availability": "N"})
 
     r("SEC013", "Use of ECB Mode Cipher",
@@ -233,7 +233,7 @@ def _build_rules() -> list[Rule]:
       "Store credentials in environment variables or a secrets manager.",
       ["https://cwe.mitre.org/data/definitions/798.html"],
       "Account takeover, data breach, lateral movement.",
-      pattern=r'(?:password|passwd|pwd|secret|api_key|apikey|token)\s*=\s*["\'][^"\']{8,}',
+      pattern=r'(?:password|passwd|pwd|secret|api_key|apikey|access_token|auth_token|client_secret|jwt_secret|secret_key|token|credential)\s*=\s*["\'][^"\']{8,}',
       tags=["credentials"])
 
     r("SEC018", "Open Redirect",
@@ -244,7 +244,7 @@ def _build_rules() -> list[Rule]:
       "Validate redirect targets against a whitelist of allowed domains.",
       ["https://cwe.mitre.org/data/definitions/601.html"],
       "Phishing, credential theft, malware distribution.",
-      pattern=r'redirect\s*\(\s*(?:request|args|params|input)',
+      pattern=r'\bredirect\s*\(\s*(?:request|args|params|input)',
       cvss={"attack_vector": "N", "attack_complexity": "L", "privileges": "N", "user_interaction": "R", "scope": "U", "confidentiality": "L", "integrity": "N", "availability": "N"})
 
     r("SEC019", "Insecure Random Number Generator",
@@ -361,7 +361,7 @@ def _build_rules() -> list[Rule]:
       "Enable SSL verification. Configure proper CA bundle for self-signed certificates.",
       ["https://cwe.mitre.org/data/definitions/295.html"],
       "Man-in-the-middle attacks, credential theft, data manipulation.",
-      pattern=r'verify\s*=\s*False|VerifySSL\s*=\s*false|TLSClientConfig\s*\{[^}]*InsecureSkipVerify:\s*true')
+      pattern=r'(?:TLSClientConfig\s*:\s*&?\s*)?tls\.Config\s*\{[^}]*InsecureSkipVerify:\s*true')
 
     r("SEC030", "Prototype Pollution (JavaScript)",
       "Modifying Object.prototype enables property injection across all objects.",
@@ -381,7 +381,7 @@ def _build_rules() -> list[Rule]:
       "Validate that extracted paths remain within the target directory.",
       ["https://cwe.mitre.org/data/definitions/22.html"],
       "Arbitrary file write leading to code execution or denial of service.",
-      pattern=r'ZipFile|zipfile\.extract|\.extractall|tarfile\.extract|ZipFile\.extractall')
+      pattern=r'(?:zipfile|tarfile)\s*\.\s*extract(?:all)?\s*\(|\.\s*extractall\s*\(')
 
     r("SEC032", "Insecure Temporary File",
       "Creating predictable temporary files enables symlink attacks and data leakage.",
@@ -497,13 +497,13 @@ def _build_rules() -> list[Rule]:
 
     r("SEC043", "Hardcoded AWS Access Key",
       "AWS access keys in source code can be used for unauthorized cloud access.",
-      Severity.CRITICAL, 0.95, FindingCategory.SECURITY,
+      Severity.HIGH, 0.95, FindingCategory.SECURITY,
       "CWE-798", "Use of Hard-coded Credentials", OWASPTop10.A01_BROKEN_ACCESS_CONTROL,
       [Language.PYTHON, Language.JAVA, Language.JAVASCRIPT, Language.GO, Language.PHP, Language.CSHARP, Language.RUBY],
       "Use IAM roles, environment variables, or AWS Secrets Manager.",
       ["https://cwe.mitre.org/data/definitions/798.html"],
       "Full AWS account compromise, data theft, resource abuse.",
-      pattern=r'AKIA[0-9A-Z]{16}',
+      pattern=r'(?<![A-Za-z0-9])(?-i:AKIA[0-9A-Z]{16})(?![A-Za-z0-9])',
       tags=["aws", "credentials"])
 
     r("SEC044", "Hardcoded Azure Key",

@@ -7,14 +7,11 @@ import {
   LayoutDashboard,
   ScanSearch,
   FileText,
-  BarChart3,
   Shield,
   Settings,
   ChevronLeft,
   ChevronRight,
   Zap,
-  Search,
-  History,
   ShieldCheck,
 } from "lucide-react";
 import { useState } from "react";
@@ -23,11 +20,7 @@ const navItems = [
   { href: "/", label: "Dashboard", icon: LayoutDashboard },
   { href: "/scan", label: "New Scan", icon: ScanSearch },
   { href: "/results", label: "Results", icon: ShieldCheck },
-  { href: "/search", label: "Search", icon: Search },
   { href: "/reports", label: "Reports", icon: FileText },
-  { href: "/security-score", label: "Security Score", icon: Shield },
-  { href: "/analytics", label: "Analytics", icon: BarChart3 },
-  { href: "/history", label: "History", icon: History },
 ];
 
 const bottomItems = [
@@ -53,10 +46,10 @@ export function Sidebar() {
         {!collapsed && (
           <div className="flex flex-col min-w-0">
             <span className="text-sm font-semibold text-foreground tracking-tight truncate">
-              MyScan
+              CodeWatch
             </span>
             <span className="text-[10px] text-muted font-medium tracking-widest uppercase">
-              Enterprise
+              Security
             </span>
           </div>
         )}

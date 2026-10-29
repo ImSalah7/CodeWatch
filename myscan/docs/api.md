@@ -1,4 +1,4 @@
-# API Reference — MyScan
+# API Reference — CodeWatch
 
 > Base URL: `http://<host>:8443` · Auth: `MYSCAN_API_KEY` when set (see [authentication.md](authentication.md)) · Content type: `application/json` unless noted.
 
@@ -54,7 +54,7 @@ Errors: `400` (missing target / SSRF or path rejected / bad scheme), `404` (loca
   "job_id": "…", "status": "completed", "target": "…", "enterprise": false,
   "started_at": "…", "completed_at": "…", "finding_count": 143,
   "result": {
-    "tool": "MyScan", "version": "3.0.0", "scan_id": "…",
+    "tool": "CodeWatch", "version": "3.0.0", "scan_id": "…",
     "repository": "…", "branch": "master", "commit": "…", "target": "…",
     "rules_executed": 57, "repo_size_bytes": 5911481, "enterprise_mode": false,
     "secret_display_mode": "smart", "llm_stats": {},
@@ -136,7 +136,7 @@ Query params (all optional):
   "metadata": {
     "scan_id": "…", "repository": "…", "branch": "master", "commit": "…", "target": "…",
     "scan_time": "…", "completed_at": "…", "scan_duration": 2.0, "scanner_version": "3.0.0",
-    "scanner_tool": "MyScan", "enterprise": false, "files_scanned": 60, "lines_scanned": 19072,
+    "scanner_tool": "CodeWatch", "enterprise": false, "files_scanned": 60, "lines_scanned": 19072,
     "rules_executed": 57, "repo_size_bytes": 5911481,
     "languages": { "python": 59 }, "occurrences_total": 185, "findings_total": 143,
     "risk_score": 100, "grade": "F"

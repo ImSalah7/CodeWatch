@@ -13,7 +13,9 @@ from ..scanners import BaseScanner
 # header name, or variable reference. The matched line is handed to the
 # validation pipeline as the code snippet so the multi-signal secret gates
 # (placeholder / weak-value / prose / known-format) actually see the value.
-CREDENTIAL_RULE_IDS: frozenset[str] = frozenset({"SEC017"})
+CREDENTIAL_RULE_IDS: frozenset[str] = frozenset(
+    {"SEC017", "SEC043", "SEC044", "SEC045", "SEC046"}
+)
 
 # innerHTML / dangerouslySetInnerHTML sinks assigned a pure static literal are
 # not XSS: there is no user input flowing into the sink.
@@ -26,7 +28,8 @@ class SecurityScanner(BaseScanner):
     name = "security"
     description = "Pattern-based security vulnerability scanner"
 
-    def __init__(self):
+    def __init__(self, suppress_secret_rules: bool = False):
+        self.suppress_secret_rules = suppress_secret_rules
         self.rules = [r for r in ALL_RULES if r.category == FindingCategory.SECURITY]
 
     def scan_file(self, content: str, file_path: str, language: Language) -> list[Finding]:
@@ -88,6 +91,11 @@ class SecurityScanner(BaseScanner):
                         confidence_reasoning=self._confidence_reasoning(rule, matched, i, mechanism),
                         matched_pattern=rule.pattern,
                         tags=rule.tags,
+                        raw_secret=(
+                            self._extract_credential(line)[1] or matched
+                            if rule.id in CREDENTIAL_RULE_IDS
+                            else ""
+                        ),
                         evidence=[{
                             "type": "regex_match",
                             "detail": (
@@ -110,9 +118,9 @@ class SecurityScanner(BaseScanner):
         ``execute("SELECT ... %s", params)`` is safe even though the query
         string contains a ``%s`` placeholder, so we drop those matches.
 
-        Credential rules (SEC017) must not duplicate format-specific secrets
-        (e.g. a ``token = "ghp_..."`` GitHub token is reported by the secrets
-        scanner) or password assignments (reported as SEC_PASSWORD_ASSIGNMENT).
+        Credential rules must not duplicate format-specific
+        secrets (reported by the secrets scanner) or password assignments
+        (reported as SEC_PASSWORD_ASSIGNMENT).
 
         XSS sinks (SEC004/SEC005) assigned a pure static string contain no
         user input and are not vulnerabilities.
@@ -153,19 +161,15 @@ class SecurityScanner(BaseScanner):
         return m.group(1).lower(), m.group(2)
 
     def _validate_credential_match(self, line: str) -> bool:
+        if self.suppress_secret_rules:
+            return False
         from ..core.secret_signals import known_format_label
 
         varname, value = self._extract_credential(line)
         if not value:
             return True
-        # Password/passwd/pwd assignments are reported once as
-        # SEC_PASSWORD_ASSIGNMENT by the secrets scanner; SEC017 (generic)
-        # would only duplicate them. Matches the variable's trailing keyword so
-        # compound names (DB_PASSWORD, APP_PASSWD) are covered too.
         if any(varname == k or varname.endswith(f"_{k}") for k in ("password", "passwd", "pwd")):
             return False
-        # Vendor-format values (ghp_..., AKIA..., AIza...) are reported by the
-        # matching specific secrets rule, not by the generic SEC017 pattern.
         return not known_format_label(value.strip())
 
     def _is_static_html_rhs(self, line: str) -> bool:

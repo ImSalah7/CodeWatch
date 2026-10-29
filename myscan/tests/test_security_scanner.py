@@ -108,6 +108,46 @@ class TestSecurityScanner:
         findings = self.scanner.scan_file(code, "client.py", Language.PYTHON)
         ssl_findings = [f for f in findings if "SSL" in f.title or "Certificate" in f.title]
         assert len(ssl_findings) >= 1
+        assert len(ssl_findings) == 1
+
+    def test_tls_warning_names_are_not_insecure_verification(self):
+        code = (
+            "from urllib3.exceptions import InsecureRequestWarning\n"
+            "class InsecureRequestWarning(RuntimeWarning):\n"
+            "    pass\n"
+        )
+        findings = self.scanner.scan_file(code, "client.py", Language.PYTHON)
+        assert not [
+            f for f in findings
+            if f.rule_id in ("SEC012", "SEC029")
+        ]
+
+    def test_internal_verify_state_is_not_a_disabled_http_option(self):
+        findings = self.scanner.scan_file(
+            "self._verify = False\n", "transport.py", Language.PYTHON
+        )
+        assert not [f for f in findings if f.rule_id == "SEC012"]
+
+    def test_zip_slip_requires_archive_extraction(self):
+        code = (
+            "from zipfile import ZipFile\n"
+            "archive = ZipFile(path)\n"
+            "archive.extractall(destination)\n"
+        )
+        findings = self.scanner.scan_file(code, "archive.py", Language.PYTHON)
+        zip_findings = [f for f in findings if f.rule_id == "SEC031"]
+        assert len(zip_findings) == 1
+        assert zip_findings[0].location.line == 3
+
+    def test_zipfile_import_and_constructor_are_not_zip_slip(self):
+        code = "from zipfile import ZipFile\narchive = ZipFile(path)\n"
+        findings = self.scanner.scan_file(code, "archive.py", Language.PYTHON)
+        assert not [f for f in findings if f.rule_id == "SEC031"]
+
+    def test_go_insecure_skip_verify_is_still_detected(self):
+        code = "tls.Config{InsecureSkipVerify: true}"
+        findings = self.scanner.scan_file(code, "client.go", Language.GO)
+        assert len([f for f in findings if f.rule_id == "SEC029"]) == 1
 
     def test_innerhtml(self):
         code = 'element.innerHTML = userInput'
@@ -186,6 +226,30 @@ class TestSecurityScanner:
         findings = self.scanner.scan_file(code, "app.py", Language.PYTHON)
         path_findings = [f for f in findings if "Path" in f.title]
         assert len(path_findings) >= 1
+
+    def test_path_traversal_rule_requires_user_controlled_open_argument(self):
+        for code in (
+            'open(os.path.join(here, "requests", "__version__.py"))',
+            "response = conn.urlopen(method, request_uri)",
+        ):
+            findings = self.scanner.scan_file(code, "safe.py", Language.PYTHON)
+            assert not [f for f in findings if f.rule_id == "SEC008"]
+
+    def test_open_redirect_rule_does_not_match_class_name(self):
+        findings = self.scanner.scan_file(
+            "raise FormDataRoutingRedirect(request)\n",
+            "app.py",
+            Language.PYTHON,
+        )
+        assert not [f for f in findings if f.rule_id == "SEC018"]
+
+    def test_open_redirect_still_detects_user_controlled_target(self):
+        findings = self.scanner.scan_file(
+            "return redirect(request.args.get('next'))\n",
+            "app.py",
+            Language.PYTHON,
+        )
+        assert any(f.rule_id == "SEC018" for f in findings)
 
     def test_clean_code_no_findings(self):
         code = '''

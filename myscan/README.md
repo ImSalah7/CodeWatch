@@ -1,8 +1,8 @@
-# MyScan
+# CodeWatch
 
 **Enterprise AI-Powered SAST Platform** — Static Application Security Testing, secrets detection, code-quality analysis, dependency vulnerability scanning, and SBOM generation.
 
-MyScan scans local and remote (git) repositories with a multi-layered analysis engine: regex rule scanning, tree-sitter AST analysis, data-flow/taint tracking, call-graph reachability, and optional LLM-assisted enrichment. Results are exposed through a REST API, a rich Next.js web UI, a CLI, and portable reports (Markdown, HTML, JSON, SARIF, CSV).
+CodeWatch scans local and remote (git) repositories with a multi-layered analysis engine: regex rule scanning, tree-sitter AST analysis, data-flow/taint tracking, call-graph reachability, and optional LLM-assisted enrichment. Results are exposed through a REST API, a rich Next.js web UI, a CLI, and portable reports (Markdown, HTML, JSON, SARIF, CSV).
 
 - **Version:** 3.0.1
 - **License:** MIT
@@ -83,7 +83,7 @@ Or install as a package:
 
 ```bash
 pip install -e .
-myscan --version
+CodeWatch v3.0.1
 ```
 
 ### Frontend (web UI)
@@ -125,15 +125,11 @@ Common options for `scan`: `--no-security`, `--no-quality`, `--no-secrets`, `--n
 
 | Route | Purpose |
 |---|---|
-| `/` | Security overview dashboard |
+| `/` | Security overview dashboard & KPI metrics |
 | `/scan` | Guided scan wizard (Quick / Standard / Enterprise presets) |
 | `/results` | Findings table with filters, sort, pagination, bulk triage, export |
 | `/findings/[fingerprint]` | Single-finding deep dive |
 | `/reports` | Per-scan findings browser + fix suggestions |
-| `/search` | Global search across all scans |
-| `/security-score` | Score ring + trend + components |
-| `/analytics` | Radar / trend / category / repository health |
-| `/history` | Scan history |
 | `/settings` | Engine & integration settings |
 
 ## Docker
@@ -197,7 +193,7 @@ myscan/
 │   ├── src/lib/          # api client, types, utils
 │   └── src/proxy.ts      # API proxy (injects key server-side)
 ├── config/patterns.yaml  # Secret-detection patterns
-├── tests/                # 405 tests
+├── tests/                # 574 tests
 ├── docs/                 # Full documentation suite
 └── CHANGELOG.md
 ```
@@ -231,7 +227,7 @@ myscan/
 ```bash
 # Backend
 python -m pip install -e ".[dev]"      # or pip install -r requirements.txt
-python -m pytest tests/ -q             # 405 tests
+python -m pytest tests/ -q             # 574 tests
 python -m ruff check src tests         # lint (line-length 120)
 
 # Frontend
@@ -249,7 +245,7 @@ python scripts/check_docs_sync.py
 
 ## Testing
 
-- **405 tests** across 16 modules: scanner correctness (incl. the SQLi parameterization matrix), enterprise analysis modules, reporters, security layer, store persistence, API findings/triage, secret display modes, and full integration tests.
+- **574 tests** across 23 test modules: scanner correctness (incl. the SQLi parameterization matrix), enterprise analysis modules, reporters, security layer, store persistence, API findings/triage, secret display modes, and full integration tests.
 - Fixture target: `tests/fixtures/sample_app/app.py` (a deliberately vulnerable Flask app).
 - See [docs/testing.md](docs/testing.md).
 

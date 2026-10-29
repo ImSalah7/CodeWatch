@@ -56,8 +56,8 @@ class SBOMDocument:
             "metadata": {
                 "timestamp": self.timestamp or datetime.now(UTC).isoformat(),
                 "tools": [{
-                    "vendor": "MyScan",
-                    "name": "MyScan Enterprise",
+                    "vendor": "CodeWatch",
+                    "name": "CodeWatch",
                     "version": __version__,
                 }],
                 "component": {
@@ -104,7 +104,7 @@ class SBOMDocument:
             "documentNamespace": f"https://github.com/myscan/{self.name}",
             "creationInfo": {
                 "created": self.timestamp or datetime.now(UTC).isoformat(),
-                "creators": [f"Tool: MyScan Enterprise {__version__}"],
+                "creators": [f"Tool: CodeWatch {__version__}"],
                 "licenseListVersion": "3.21",
             },
             "packages": [],

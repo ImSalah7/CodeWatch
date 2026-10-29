@@ -100,7 +100,7 @@ export default function SettingsPage() {
         <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }}>
           <h1 className="text-xl font-bold text-foreground">Settings</h1>
           <p className="text-sm text-muted mt-0.5">
-            Configure your MyScan Enterprise platform
+            Configure your CodeWatch SAST platform
           </p>
         </motion.div>
         <button

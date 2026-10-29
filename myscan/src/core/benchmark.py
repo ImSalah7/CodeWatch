@@ -287,11 +287,11 @@ def run_benchmark(
     enterprise: bool = False,
     tools: list[str] | None = None,
 ) -> BenchmarkComparison:
-    """Run a full benchmark comparing MyScan against external tools.
+    """Run a full benchmark comparing CodeWatch against external tools.
 
     Args:
         target: Path or URL to scan
-        enterprise: Whether to use MyScan enterprise mode
+        enterprise: Whether to use CodeWatch enterprise mode
         tools: List of external tools to compare (default: ["semgrep", "bandit"])
 
     Returns:

@@ -47,7 +47,7 @@ Reports may expose sensitive credentials. Use only when developer explicitly ena
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>MyScan Enterprise Security Report</title>
+<title>CodeWatch Security Report</title>
 <style>
 * {{ margin: 0; padding: 0; box-sizing: border-box; }}
 body {{ font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Fira Code', monospace; background: #0f172a; color: #e2e8f0; line-height: 1.6; }}
@@ -110,9 +110,9 @@ tr:hover {{ background: rgba(59, 130, 246, 0.05); }}
 <body>
 <div class="container">
 <div class="header">
-<h1>MyScan Enterprise Security Report</h1>
+<h1>CodeWatch Security Report</h1>
 <p class="subtitle">Repository: {html_escape(getattr(result, 'repository', '') or 'N/A')} | Branch: {html_escape(getattr(result, 'branch', '') or 'N/A')} | Commit: {html_escape(getattr(result, 'commit', '') or 'N/A')} | Scan ID: {html_escape(getattr(result, 'scan_id', '') or 'N/A')}</p>
-<p class="subtitle">Generated: {datetime.now(UTC).strftime("%Y-%m-%d %H:%M UTC")} | Scanner: MyScan v{__version__} | Files scanned: {result.files_scanned} | Rules executed: {getattr(result, 'rules_executed', 0)} | Duration: {result.scan_duration:.1f}s | Lines: {result.lines_scanned:,}</p>
+<p class="subtitle">Generated: {datetime.now(UTC).strftime("%Y-%m-%d %H:%M UTC")} | Scanner: CodeWatch v{__version__} | Files scanned: {result.files_scanned} | Rules executed: {getattr(result, 'rules_executed', 0)} | Duration: {result.scan_duration:.1f}s | Lines: {result.lines_scanned:,}</p>
 </div>
 
 {secret_warning}
@@ -163,7 +163,7 @@ tr:hover {{ background: rgba(59, 130, 246, 0.05); }}
 {'<div class="section"><h2>Secret Findings (' + str(len(secs)) + ')</h2><table><thead><tr><th>Severity</th><th>Title</th><th>Location</th><th>Fix</th></tr></thead><tbody>' + secret_rows + '</tbody></table></div>' if secs else ''}
 
 <div class="footer">
-<p>MyScan v{__version__} Enterprise - AI-Powered SAST Platform</p>
+<p>CodeWatch v{__version__} - AI-Powered SAST Platform</p>
 </div>
 </div>
 </body>

@@ -1,4 +1,4 @@
-# Deployment Guide — MyScan
+# Deployment Guide — CodeWatch
 
 ## 1. Deployment options
 
@@ -51,7 +51,7 @@ Systemd unit (`/etc/systemd/system/myscan-api.service`):
 
 ```ini
 [Unit]
-Description=MyScan API
+Description=CodeWatch API
 After=network.target
 
 [Service]
@@ -119,7 +119,7 @@ server {
 ## 5. TLS
 
 - Terminate TLS at the reverse proxy (nginx/Caddy/Traefik).
-- MyScan itself does not serve TLS (plain HTTP on 8443); do not expose 8443 publicly without TLS or a proxy.
+- CodeWatch itself does not serve TLS (plain HTTP on 8443); do not expose 8443 publicly without TLS or a proxy.
 
 ## 6. Data & persistence
 

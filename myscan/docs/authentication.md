@@ -1,8 +1,8 @@
-# Authentication — MyScan
+# Authentication — CodeWatch
 
 ## 1. Overview
 
-MyScan authenticates **API clients** with a single shared API key. There is no user database, no UI login, and no per-user roles (those are roadmap items).
+CodeWatch authenticates **API clients** with a single shared API key. There is no user database, no UI login, and no per-user roles (those are roadmap items).
 
 - The key is configured via the `MYSCAN_API_KEY` environment variable.
 - **Empty `MYSCAN_API_KEY` = authentication disabled** (local development only).
@@ -49,7 +49,7 @@ The API server is launched with `run_api.py` (waitress, 16 threads). The key is 
 
 ```bash
 MYSCAN_API_KEY=… python run_api.py
-# MyScan API listening on http://0.0.0.0:8443 (waitress)
+# CodeWatch API listening on http://0.0.0.0:8443 (waitress)
 ```
 
 ## 6. Operational guidance

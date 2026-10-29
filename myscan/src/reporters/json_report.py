@@ -7,6 +7,12 @@ from typing import Any
 
 from ..__init__ import __version__
 from ..core.models import ScanResult
+from ..core.secret_display import (
+    SecretDisplayConfig,
+    SecretDisplayMode,
+    get_secret_display_value,
+    mask_secret,
+)
 
 
 class JSONReporter:
@@ -18,7 +24,7 @@ class JSONReporter:
         report: dict[str, Any] = {
             "schemaVersion": "3.0.0",
             "tool": {
-                "name": "MyScan",
+                "name": "CodeWatch",
                 "version": __version__,
                 "enterpriseMode": getattr(result, '_enterprise_mode', False),
             },
@@ -44,10 +50,11 @@ class JSONReporter:
                 "securityFindings": len(result.security_findings),
                 "qualityFindings": len(result.quality_findings),
                 "secretFindings": len(result.secret_findings),
+                "dependencyFindings": len(result.dependency_findings),
             },
             "secretDisplayMode": secret_display,
             "languages": result.languages_detected,
-            "findings": self._serialize_findings(result),
+            "findings": self._serialize_findings(result, secret_display),
         }
 
         if hasattr(result, '_enterprise_metrics'):
@@ -56,8 +63,9 @@ class JSONReporter:
 
         return json.dumps(report, indent=2, default=str)
 
-    def _serialize_findings(self, result: ScanResult) -> list[dict]:
+    def _serialize_findings(self, result: ScanResult, secret_display: str) -> list[dict]:
         findings = []
+        display_mode = SecretDisplayConfig.from_string(secret_display).mode
         for f in result.findings:
             finding: dict[str, Any] = {
                 "ruleId": f.rule_id,
@@ -115,8 +123,30 @@ class JSONReporter:
                 finding["tags"] = f.tags
             if f.is_false_positive:
                 finding["isFalsePositive"] = True
-            if f.raw_secret:
+            if f.raw_secret and secret_display == "full":
                 finding["rawSecret"] = f.raw_secret
+
+            if f.raw_secret:
+                if display_mode == SecretDisplayMode.FULL:
+                    display_value = f.raw_secret
+                elif f.category.value == "secret":
+                    display_value = get_secret_display_value(f, display_mode)
+                else:
+                    display_value = mask_secret(f.raw_secret)
+                finding = _replace_secret_text(finding, f.raw_secret, display_value)
 
             findings.append(finding)
         return findings
+
+
+def _replace_secret_text(value: Any, secret: str, replacement: str) -> Any:
+    if isinstance(value, str):
+        return value.replace(secret, replacement)
+    if isinstance(value, list):
+        return [_replace_secret_text(item, secret, replacement) for item in value]
+    if isinstance(value, dict):
+        return {
+            key: _replace_secret_text(item, secret, replacement)
+            for key, item in value.items()
+        }
+    return value

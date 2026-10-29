@@ -7,6 +7,7 @@ from typing import Any
 
 from ..__init__ import __version__
 from ..core.models import ScanResult
+from ..core.secret_display import mask_secret
 
 
 class SARIFReporter:
@@ -19,7 +20,7 @@ class SARIFReporter:
             "runs": [{
                 "tool": {
                     "driver": {
-                        "name": "MyScan",
+                        "name": "CodeWatch",
                         "version": __version__,
                         "informationUri": "https://github.com/myscan/myscan",
                         "rules": self._extract_rules(result),
@@ -58,6 +59,13 @@ class SARIFReporter:
                 }],
             }],
         }
+        for finding in result.findings:
+            if finding.raw_secret:
+                sarif = _replace_secret_text(
+                    sarif,
+                    finding.raw_secret,
+                    mask_secret(finding.raw_secret),
+                )
         return json.dumps(sarif, indent=2, default=str)
 
     def _extract_rules(self, result: ScanResult) -> list[dict]:
@@ -180,3 +188,16 @@ class SARIFReporter:
             "critical": "error", "high": "error",
             "medium": "warning", "low": "note", "info": "note",
         }.get(severity, "note")
+
+
+def _replace_secret_text(value: Any, secret: str, replacement: str) -> Any:
+    if isinstance(value, str):
+        return value.replace(secret, replacement)
+    if isinstance(value, list):
+        return [_replace_secret_text(item, secret, replacement) for item in value]
+    if isinstance(value, dict):
+        return {
+            key: _replace_secret_text(item, secret, replacement)
+            for key, item in value.items()
+        }
+    return value

@@ -181,17 +181,23 @@ class ValidationPipeline:
         if result.confidence < self.min_confidence:
             return None
 
+        is_secret = is_secret_finding
         validated = dict(finding)
-        validated["confidence"] = round(result.confidence, 3)
+        detected_confidence = float(finding.get("confidence", 0.0) or 0.0)
+        validated_confidence = (
+            max(result.confidence, detected_confidence)
+            if is_secret
+            else result.confidence
+        )
+        validated["confidence"] = round(validated_confidence, 3)
         validated["verification_level"] = result.verification_level
         validated["evidence"] = result.to_dict()
         validated["validated"] = True
         likely_fp, likely_fp_reason = self._likely_false_positive(result)
-        is_secret = category == "SECRET" or rule_id.startswith("SEC_")
-        if is_secret and result.confidence < self.secret_confidence_threshold:
+        if is_secret and validated_confidence < self.secret_confidence_threshold:
             likely_fp = True
             threshold_reason = (
-                f"Confidence {result.confidence:.2f} is below the secret confidence "
+                f"Confidence {validated_confidence:.2f} is below the secret confidence "
                 f"threshold ({self.secret_confidence_threshold:.2f})"
             )
             likely_fp_reason = "; ".join(filter(None, [likely_fp_reason, threshold_reason]))

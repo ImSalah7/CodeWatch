@@ -228,7 +228,7 @@ def test_serialization_roundtrip(db):
     from src.core.models import ScanResult
     d = _sample_finding_dict()
     payload = {
-        "tool": "MyScan", "version": "3.0.0",
+        "tool": "CodeWatch", "version": "3.0.0",
         "scan_start": "2026-01-01T00:00:00+00:00",
         "scan_end": "2026-01-01T00:00:05+00:00",
         "scan_duration": 5.0,

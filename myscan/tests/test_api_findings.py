@@ -72,7 +72,7 @@ def test_findings_metadata_block(client):
     assert m["branch"] == "main"
     assert m["commit"] == "abc123"
     assert m["findings_total"] == 2
-    assert m["scanner_tool"] == "MyScan"
+    assert m["scanner_tool"] == "CodeWatch"
 
 
 def test_findings_filters_and_sort(client):

@@ -1,4 +1,4 @@
-# Folder Structure — MyScan
+# Folder Structure — CodeWatch
 
 Repository layout with one-line descriptions. Source of truth: the tree at `myscan/`.
 
@@ -50,10 +50,8 @@ myscan/
 │   ├── tsconfig.json               # strict, @/* → ./src/*
 │   ├── eslint.config.mjs           # next/core-web-vitals + typescript
 │   └── src/
-│       ├── app/                    # Routes: /, /scan, /results, /findings/[fingerprint], /reports,
-│       │                           #   /search, /security-score, /analytics, /history, /settings
-│       ├── components/             # Client components (results, findings, reports, scan, dashboard,
-│       │                           #   analytics, history, search, security-score, ui, layout)
+│       ├── app/                    # Routes: /, /scan, /results, /findings/[fingerprint], /reports, /settings
+│       ├── components/             # Client components (results, findings, reports, scan, dashboard, ui, layout)
 │       ├── lib/
 │       │   ├── api.ts              # Typed API client + SSE subscription + download helper
 │       │   ├── types.ts            # Finding, FindingsMetadata, ScanJob, Stats, etc.
@@ -62,7 +60,7 @@ myscan/
 │       └── app/globals.css         # Tailwind v4 theme (dark navy/cyan) + component classes
 ├── scripts/
 │   └── check_docs_sync.py          # Docs↔code consistency checker (CI + local)
-├── tests/                          # 405 tests (see docs/testing.md)
+├── tests/                          # 574 tests (see docs/testing.md)
 │   └── fixtures/sample_app/app.py  # Deliberately vulnerable Flask app used by integration tests
 └── myscan_reports/                 # Report output (gitignored)
 ```

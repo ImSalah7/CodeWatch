@@ -18,10 +18,13 @@ Supports:
 from __future__ import annotations
 
 import json
+import os
 import re
 from dataclasses import dataclass, field
 from enum import Enum
 from pathlib import Path
+
+from .config import SKIP_DIRS
 
 
 class PackageManager(Enum):
@@ -54,6 +57,8 @@ class Dependency:
     is_dev: bool = False
     license: str = ""
     homepage: str = ""
+    line: int = 0
+    version_specifier: str = ""
 
 
 @dataclass
@@ -67,6 +72,8 @@ class Vulnerability:
     description: str = ""
     fixed_version: str = ""
     references: list[str] = field(default_factory=list)
+    cwe: str = ""
+    dependency_specifier: str = ""
 
 
 @dataclass
@@ -107,6 +114,13 @@ KNOWN_VULNERABILITIES = {
     "requests": [
         {"versions": ["<2.20.0"], "id": "CVE-2018-18074", "severity": "high",
          "title": "Requests IP address leak", "fixed": "2.20.0"},
+        {"versions": ["<2.32.0"], "id": "CVE-2024-35195", "severity": "medium",
+         "title": "Requests Session TLS verification may remain disabled",
+         "fixed": "2.32.0", "cwe": "CWE-670",
+         "references": [
+             "https://github.com/advisories/GHSA-9wx4-h78v-vm56",
+             "https://nvd.nist.gov/vuln/detail/CVE-2024-35195",
+         ]},
     ],
     "flask": [
         {"versions": ["<1.0"], "id": "CVE-2018-1000656", "severity": "high",
@@ -365,8 +379,16 @@ class DependencyScanner:
             "poetry.lock": self._scan_poetry_lock,
         }
 
-        for filename, scanner_func in manifest_files.items():
-            for path in root.rglob(filename):
+        skipped_dirs = {name.lower() for name in SKIP_DIRS}
+        for directory, subdirectories, filenames in os.walk(root):
+            subdirectories[:] = sorted(
+                name for name in subdirectories
+                if name.lower() not in skipped_dirs
+            )
+            for filename, scanner_func in manifest_files.items():
+                if filename not in filenames:
+                    continue
+                path = Path(directory) / filename
                 try:
                     result = scanner_func(str(path))
                     if result and result.dependencies:
@@ -379,6 +401,13 @@ class DependencyScanner:
                         package_manager=PackageManager.UNKNOWN,
                         errors=[str(e)],
                     ))
+
+        project_result = self._scan_project_version(root)
+        if project_result:
+            self._check_vulnerabilities(project_result)
+            self._calculate_risk_score(project_result)
+            if project_result.vulnerabilities:
+                results.append(project_result)
 
         return results
 
@@ -408,16 +437,20 @@ class DependencyScanner:
         result = DependencyScanResult(file_path=file_path, package_manager=PackageManager.PIP)
         try:
             with open(file_path, encoding="utf-8", errors="ignore") as f:
-                for line in f:
+                for line_number, line in enumerate(f, 1):
                     line = line.strip()
                     if not line or line.startswith(("#", "-")):
                         continue
                     match = re.match(r"^([a-zA-Z0-9_.-]+)\s*([>=<~!]+)\s*([0-9a-zA-Z.*]+(?:[,\s]+[<>=!~]+\s*[0-9a-zA-Z.*]+)*)", line)
                     if match:
+                        version_specifier = match.group(2) + match.group(3)
+                        version_match = re.match(r"[0-9a-zA-Z.*]+", match.group(3))
                         result.dependencies.append(Dependency(
                             name=match.group(1).lower(),
-                            version=match.group(3),
+                            version=version_match.group() if version_match else match.group(3),
                             package_manager=PackageManager.PIP,
+                            line=line_number,
+                            version_specifier=version_specifier,
                         ))
         except Exception as e:
             result.errors.append(str(e))
@@ -433,11 +466,12 @@ class DependencyScanner:
             for name, version in data.get("dependencies", {}).items():
                 result.dependencies.append(Dependency(
                     name=name, version=version, package_manager=PackageManager.NPM, is_direct=True,
+                    version_specifier=version,
                 ))
             for name, version in data.get("devDependencies", {}).items():
                 result.dependencies.append(Dependency(
                     name=name, version=version, package_manager=PackageManager.NPM,
-                    is_direct=True, is_dev=True,
+                    is_direct=True, is_dev=True, version_specifier=version,
                 ))
         except Exception as e:
             result.errors.append(str(e))
@@ -450,15 +484,131 @@ class DependencyScanner:
         result = DependencyScanResult(file_path=file_path, package_manager=PackageManager.PIP)
         try:
             content = Path(file_path).read_text(encoding="utf-8")
-            for match in re.finditer(r'"([a-zA-Z0-9_.-]+)\s*([>=<~!]+)\s*([0-9a-zA-Z.*]+)"', content):
+            for match in re.finditer(
+                r'"([a-zA-Z0-9_.-]+)\s*([>=<~!]+)\s*'
+                r'([0-9a-zA-Z.*]+(?:[,\s]+[<>=!~]+\s*[0-9a-zA-Z.*]+)*)"',
+                content,
+            ):
+                version_specifier = match.group(2) + match.group(3)
+                version_match = re.match(r"[0-9a-zA-Z.*]+", match.group(3))
                 result.dependencies.append(Dependency(
-                    name=match.group(1).lower(), version=match.group(3),
+                    name=match.group(1).lower(),
+                    version=version_match.group() if version_match else match.group(3),
                     package_manager=PackageManager.PIP,
+                    line=content.count("\n", 0, match.start()) + 1,
+                    version_specifier=version_specifier,
                 ))
         except Exception as e:
             result.errors.append(str(e))
         result.total_dependencies = len(result.dependencies)
         result.direct_dependencies = len(result.dependencies)
+        return result
+
+    def _scan_project_version(self, root: Path) -> DependencyScanResult | None:
+        """Read a project's own literal package version without executing setup code."""
+        package_name = ""
+        project_file = root / "pyproject.toml"
+        setup_file = root / "setup.py"
+
+        if project_file.is_file():
+            try:
+                content = project_file.read_text(encoding="utf-8")
+            except OSError:
+                content = ""
+            project_section = re.search(
+                r"(?ms)^\[project\]\s*(.*?)(?=^\[|\Z)", content
+            )
+            if project_section:
+                name_match = re.search(
+                    r'(?m)^\s*name\s*=\s*["\']([^"\']+)["\']', project_section.group(1)
+                )
+                if name_match:
+                    package_name = name_match.group(1).lower().replace("-", "_")
+
+        if not package_name and setup_file.is_file():
+            try:
+                content = setup_file.read_text(encoding="utf-8", errors="ignore")
+            except OSError:
+                content = ""
+            name_match = re.search(
+                r'\bname\s*=\s*["\']([A-Za-z0-9_.-]+)["\']', content
+            )
+            if name_match:
+                package_name = name_match.group(1).lower().replace("-", "_")
+            elif re.search(
+                r'\bname\s*=\s*\w+\s*\[\s*["\']__title__["\']\s*\]',
+                content,
+            ):
+                for candidate_name in KNOWN_VULNERABILITIES:
+                    candidate_version = next(
+                        (
+                            candidate
+                            for candidate in (
+                                root / candidate_name / "__version__.py",
+                                root / "src" / candidate_name / "__version__.py",
+                            )
+                            if candidate.is_file()
+                        ),
+                        None,
+                    )
+                    if candidate_version is None:
+                        continue
+                    try:
+                        version_content = candidate_version.read_text(encoding="utf-8")
+                    except OSError:
+                        continue
+                    title_match = re.search(
+                        r'(?m)^\s*__title__\s*=\s*["\']([^"\']+)["\']',
+                        version_content,
+                    )
+                    if (
+                        title_match
+                        and title_match.group(1).lower().replace("-", "_")
+                        == candidate_name
+                    ):
+                        package_name = candidate_name
+                        break
+
+        if not package_name or package_name not in KNOWN_VULNERABILITIES:
+            return None
+
+        version_file = next(
+            (
+                candidate
+                for candidate in (
+                    root / package_name / "__version__.py",
+                    root / "src" / package_name / "__version__.py",
+                )
+                if candidate.is_file()
+            ),
+            None,
+        )
+        if version_file is None:
+            return None
+
+        try:
+            version_content = version_file.read_text(encoding="utf-8")
+        except OSError:
+            return None
+        version_match = re.search(
+            r'(?m)^\s*__version__\s*=\s*["\']([^"\']+)["\']',
+            version_content,
+        )
+        if not version_match:
+            return None
+
+        result = DependencyScanResult(
+            file_path=str(version_file),
+            package_manager=PackageManager.PIP,
+        )
+        result.dependencies.append(Dependency(
+            name=package_name,
+            version=version_match.group(1),
+            package_manager=PackageManager.PIP,
+            line=version_content.count("\n", 0, version_match.start()) + 1,
+        ))
+        result.total_dependencies = 1
+        result.direct_dependencies = 1
         return result
 
     def _scan_package_lock(self, file_path: str) -> DependencyScanResult:
@@ -564,7 +714,8 @@ class DependencyScanner:
             name_lower = dep.name.lower()
             if name_lower not in KNOWN_VULNERABILITIES:
                 continue
-            dep_bounds = _parse_version_spec(dep.version)
+            version_specifier = dep.version_specifier or dep.version
+            dep_bounds = _parse_version_spec(version_specifier)
             for vuln_info in KNOWN_VULNERABILITIES[name_lower]:
                 vuln_bounds = [
                     b
@@ -581,6 +732,9 @@ class DependencyScanner:
                         severity=VulnerabilitySeverity(vuln_info.get("severity", "unknown")),
                         title=vuln_info.get("title", ""),
                         fixed_version=vuln_info.get("fixed", ""),
+                        references=vuln_info.get("references", []),
+                        cwe=vuln_info.get("cwe", ""),
+                        dependency_specifier=dep.version_specifier,
                     ))
 
         result.critical_vulns = sum(1 for v in result.vulnerabilities if v.severity == VulnerabilitySeverity.CRITICAL)

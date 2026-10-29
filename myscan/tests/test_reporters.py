@@ -99,13 +99,38 @@ class TestJSONReporter:
         reporter = JSONReporter()
         json_str = reporter.generate(sample_result)
         data = json.loads(json_str)
-        assert data["tool"]["name"] == "MyScan"
+        assert data["tool"]["name"] == "CodeWatch"
         assert data["summary"]["totalFindings"] == 3
+
+    def test_json_and_sarif_mask_secret_text_for_any_finding_category(self):
+        synthetic_secret = "synthetic_Token_9vR4kN7xQ2pL"
+        result = ScanResult(findings=[
+            Finding(
+                rule_id="SEC045", title="Hardcoded GitHub Token",
+                description="Synthetic credential regression test",
+                severity=Severity.CRITICAL, confidence=0.9,
+                category=FindingCategory.SECURITY, language=Language.PYTHON,
+                location=CodeLocation(
+                    file_path="config.py", line=1,
+                    code_snippet=f'GITHUB_TOKEN = "{synthetic_secret}"',
+                ),
+                raw_secret=synthetic_secret,
+                evidence=[{"detail": f"matched {synthetic_secret}"}],
+            ),
+        ])
+
+        json_report = JSONReporter().generate(result)
+        sarif_report = SARIFReporter().generate(result)
+        json.loads(json_report)
+        sarif = json.loads(sarif_report)
+        assert sarif["version"] == "2.1.0"
+        assert synthetic_secret not in json_report
+        assert synthetic_secret not in sarif_report
 
 
 class TestMarkdownReporter:
     def test_generate(self, sample_result):
         reporter = MarkdownReporter()
         md = reporter.generate(sample_result)
-        assert "MyScan" in md
+        assert "CodeWatch" in md
         assert "SQL Injection" in md

@@ -15,7 +15,7 @@ const geistMono = Geist_Mono({
 });
 
 export const metadata: Metadata = {
-  title: "MyScan Enterprise | SAST Platform",
+  title: "CodeWatch | SAST Platform",
   description: "AI-Powered Static Application Security Testing",
 };
 

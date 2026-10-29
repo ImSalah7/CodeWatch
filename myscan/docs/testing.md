@@ -1,8 +1,8 @@
-# Testing — MyScan
+# Testing — CodeWatch
 
 ## 1. Overview
 
-MyScan's test suite covers the scanner core, security analyzers, API, and CLI. Test count: **405** as of the current revision.
+CodeWatch's test suite covers the scanner core, security analyzers, API, and CLI. Test count: **574** as of the current revision.
 
 | Layer | Location | Framework |
 |---|---|---|
@@ -18,7 +18,7 @@ python -m venv .venv && source .venv/bin/activate   # Windows: .venv\Scripts\act
 pip install -r requirements.txt
 
 python -m pytest tests/ -q
-#  405 passed in 4.12s   (example)
+#  574 passed   (example; runtime varies by environment)
 
 # Focused runs
 python -m pytest tests/ -q -k scanner      # scanner core

@@ -1,10 +1,10 @@
-# Security — MyScan
+# Security — CodeWatch
 
-This document describes MyScan's security model: what it protects, how, and how to configure it. For the API-key mechanics see [authentication.md](authentication.md).
+This document describes CodeWatch's security model: what it protects, how, and how to configure it. For the API-key mechanics see [authentication.md](authentication.md).
 
 ## 1. Threat model
 
-MyScan is a self-hosted scanner. Primary threats considered:
+CodeWatch is a self-hosted scanner. Primary threats considered:
 
 | Threat | Mitigation |
 |---|---|
@@ -99,5 +99,5 @@ The Next.js proxy (`frontend/src/proxy.ts`) rewrites `/api/*` and `/health` to t
 ## 11. Known scope / limitations
 
 - **Single shared API key** — no per-user RBAC or UI login (roadmap item).
-- Secrets in transit rely on the surrounding TLS proxy (MyScan serves HTTP).
+- Secrets in transit rely on the surrounding TLS proxy (CodeWatch serves HTTP).
 - LLM enrichment sends code snippets to the configured provider — disable (`MYSCAN_LLM_ENHANCE=0`) for air-gapped or sensitive repositories.

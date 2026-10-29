@@ -1,4 +1,4 @@
-# User Guide — MyScan
+# User Guide — CodeWatch
 
 ## 1. Quick start
 

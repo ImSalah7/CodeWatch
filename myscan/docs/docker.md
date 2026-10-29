@@ -1,4 +1,4 @@
-# Docker — MyScan
+# Docker — CodeWatch
 
 ## 1. Images
 

@@ -1,4 +1,4 @@
-# CI/CD — MyScan
+# CI/CD — CodeWatch
 
 ## 1. Current pipeline
 

@@ -1,4 +1,4 @@
-# MyScan Documentation
+# CodeWatch Documentation
 
 Enterprise AI-Powered SAST Platform.
 

@@ -1,4 +1,4 @@
-"""Call Graph builder for MyScan Enterprise SAST platform.
+"""Call Graph builder for CodeWatch SAST platform.
 
 Builds a function-level call graph from Python AST analysis and
 determines reachability from entry points.

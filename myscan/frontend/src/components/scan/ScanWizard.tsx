@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useCallback, useRef } from "react";
+import { useState, useCallback, useRef, useEffect } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import {
   FolderOpen,
@@ -20,7 +20,7 @@ import {
   Sliders,
   Globe,
 } from "lucide-react";
-import { startScan, getScanStatus, subscribeToScanEvents, cancelScan, pauseScan, resumeScan } from "@/lib/api";
+import { startScan, getScanStatus, subscribeToScanEvents, cancelScan, pauseScan, resumeScan, getHistory } from "@/lib/api";
 import type { Finding, ScanJob, ScanResult } from "@/lib/types";
 import { cn } from "@/lib/utils";
 import { SeverityBadge } from "@/components/ui/SeverityBadge";
@@ -70,13 +70,6 @@ const presets = [
   },
 ];
 
-const recentRepos = [
-  "C:\\Users\\sallu\\OneDrive\\Desktop\\SMTHNG\\myscan",
-  "C:\\Users\\sallu\\OneDrive\\Desktop\\SMTHNG",
-  "https://github.com/python/cpython",
-  "https://github.com/pallets/flask",
-];
-
 function isUrl(s: string): boolean {
   return /^(https?:\/\/|git@|ssh:\/\/|git:\/\/).+/i.test(s.trim());
 }
@@ -88,6 +81,7 @@ function repoName(url: string): string {
 
 export function ScanWizard() {
   const [step, setStep] = useState(0);
+  const [recentRepos, setRecentRepos] = useState<string[]>([]);
   const [config, setConfig] = useState<ScanConfig>({
     target: "",
     enterprise: false,
@@ -95,6 +89,17 @@ export function ScanWizard() {
     minConfidence: 0.2,
     secretDisplay: "smart",
   });
+
+  useEffect(() => {
+    getHistory(15)
+      .then((res) => {
+        if (res && res.history) {
+          const unique = Array.from(new Set(res.history.map((j) => j.target).filter(Boolean))).slice(0, 5);
+          setRecentRepos(unique);
+        }
+      })
+      .catch(() => {});
+  }, []);
   const [scanning, setScanning] = useState(false);
   const scanningRef = useRef(false);
   const [result, setResult] = useState<ScanJob | null>(null);

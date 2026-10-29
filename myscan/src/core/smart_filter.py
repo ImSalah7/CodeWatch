@@ -39,13 +39,23 @@ class SmartFilter:
             "readme" in file_lower or "docs/" in file_lower or "example" in file_lower
         ) and finding.category == FindingCategory.SECURITY:
             return True
-        for pattern, sev, reason in FALSE_POSITIVE_PATTERNS:
-            if re.search(pattern, code) and finding.severity.numeric >= sev.numeric:
-                finding.confidence_reasoning = f"Reduced confidence: {reason}"
-                finding.confidence *= 0.3
-                if finding.confidence < 0.3:
-                    finding.is_false_positive = True
-                    return True
+        # The dev/example demotion must not fire on words that live *inside* a
+        # credential value (e.g. `mscan_test_...`, `sk_test_...`, `dev_key`).
+        # Mask the raw secret out of the snippet so context markers (comments,
+        # variable names, surrounding text) still demote, but the value itself
+        # does not. The secret is validated by its own multi-signal gates.
+        context_code = code
+        raw = (finding.raw_secret or "").strip().strip("'\"")
+        if raw:
+            context_code = code.replace(raw, "")
+        if finding.category != FindingCategory.SECRET:
+            for pattern, sev, reason in FALSE_POSITIVE_PATTERNS:
+                if re.search(pattern, context_code) and finding.severity.numeric >= sev.numeric:
+                    finding.confidence_reasoning = f"Reduced confidence: {reason}"
+                    finding.confidence *= 0.3
+                    if finding.confidence < 0.3:
+                        finding.is_false_positive = True
+                        return True
         if finding.severity == Severity.HIGH and finding.confidence < 0.5:
             finding.severity = Severity.MEDIUM
         if finding.severity == Severity.CRITICAL and finding.confidence < 0.5:

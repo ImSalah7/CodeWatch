@@ -19,7 +19,9 @@ def _engine(files: dict[str, str], **kwargs) -> list:
     with tempfile.TemporaryDirectory() as td:
         root = Path(td)
         for name, content in files.items():
-            (root / name).write_text(content)
+            path = root / name
+            path.parent.mkdir(parents=True, exist_ok=True)
+            path.write_text(content)
         cfg = ScanConfig(include_tests=True, include_docs=True, include_examples=True, **kwargs)
         return ScanEngine(cfg).scan(str(root)).findings
 
@@ -29,6 +31,42 @@ def _rules(findings, *rule_ids):
 
 
 class TestPlaceholderCredentialsNotReported:
+    def test_dictionary_words_in_text_are_not_aws_access_keys(self):
+        findings = _engine({
+            "animals.txt": (
+                "asianconstablebutterfly\n"
+                "akianimalclassification\n"
+                "asiaswallowtailbutterfly\n"
+                "prefixAKIA2EPBN2U4Z3FQRXDFsuffix\n"
+            ),
+            "words.py": (
+                "asianconstablebutterfly\n"
+                "akianimalclassification\n"
+                "asiaswallowtailbutterfly\n"
+                "prefixAKIA2EPBN2U4Z3FQRXDFsuffix\n"
+            ),
+        })
+
+        assert not _rules(findings, "SEC_AWS_ACCESS_KEY", "SEC043")
+
+    def test_myscan_test_api_key_placeholder_rejected_without_hiding_real_keys(self):
+        fake = _engine({
+            "app.js": 'const SERVICE_API_KEY = "mscan_test_7Hq2K9vP4xL8nR3sW6cD1fG5jA0";\n',
+        })
+        assert not _rules(fake, "SEC_GENERIC_API_KEY")
+
+        real = _engine({
+            "app.js": 'const SERVICE_API_KEY = "mS9vQ2xK7pL4nR8dW3cF1hJ6";\n',
+        })
+        assert any(f.rule_id == "SEC_GENERIC_API_KEY" for f in real)
+
+        embedded_marker = _engine({
+            "app.js": (
+                'const SERVICE_API_KEY = "prefixmscan_test_7Hq2K9vP4xL8nR3sW6cD1fG5jA0";\n'
+            ),
+        })
+        assert any(f.rule_id == "SEC_GENERIC_API_KEY" for f in embedded_marker)
+
     def test_dot_length_never_a_secret(self):
         findings = _engine({"a.py": 'password = "length"\napi_key = "size"\n'})
         assert not _rules(findings, "SEC_PASSWORD_ASSIGNMENT", "SEC017", "SEC_GENERIC_API_KEY")
@@ -93,6 +131,30 @@ class TestPlaceholderCredentialsNotReported:
 
 
 class TestRealSecretsStillReported:
+    def test_aws_access_key_ids_are_case_sensitive_exact_tokens(self):
+        findings = _engine({
+            "creds.py": (
+                'AWS_ACCESS_KEY_ID = "AKIA2EPBN2U4Z3FQRXDF"\n'
+                'AWS_SESSION_ACCESS_KEY_ID = "ASIA2EPBN2U4Z3FQRXDF"\n'
+            ),
+        })
+
+        aws_findings = _rules(findings, "SEC_AWS_ACCESS_KEY")
+        assert len(aws_findings) == 2
+        assert not _rules(findings, "SEC043")
+        assert {f.raw_secret for f in aws_findings} == {
+            "AKIA2EPBN2U4Z3FQRXDF",
+            "ASIA2EPBN2U4Z3FQRXDF",
+        }
+        assert all(f.severity == Severity.HIGH for f in aws_findings)
+        assert all(0.6 <= f.confidence <= 0.95 for f in aws_findings)
+
+    def test_stripe_test_key_still_detected(self):
+        findings = _engine({
+            "config.py": 'STRIPE_API_KEY = "sk_test_51H8kLmN4pQrT7vWxY2zA5bC9dEfGhJk"\n',
+        })
+        assert any(f.rule_id == "SEC_STRIPE_KEY_TEST" for f in findings)
+
     def test_strong_password_survives(self):
         findings = _engine({"auth.py": 'password = "P@ssw0rd!XyZz99"\n'})
         assert any(f.rule_id == "SEC_PASSWORD_ASSIGNMENT" for f in findings)
@@ -108,6 +170,57 @@ class TestRealSecretsStillReported:
     def test_real_db_url_survives(self):
         findings = _engine({"creds.py": 'DB_URL = "postgresql://appuser:S3cr3t!Pa55w0rd@prod-db.internal:5432/app"\n'})
         assert any(f.rule_id == "SEC_CLOUD_DB_URL_CREDS" for f in findings)
+
+
+class TestAdditionalSecretRegressions:
+    def test_real_credentials_in_test_fixtures_are_still_reported(self):
+        findings = _engine({
+            "tests/fixtures/config.py": (
+                'API_TOKEN = "aB3dE5fG7hI9jK1lM3nO5pQ7rS9tU1vW3xY5"\n'
+                'DB_URL = "postgresql://deploy_user:Q7z!Lp3#vM8$N2xK@db.internal/app"\n'
+                'password = "P@ssw0rd!XyZz99"\n'
+            ),
+        })
+        reported = {f.rule_id for f in findings}
+        assert "SEC_GENERIC_API_KEY" in reported
+        assert "SEC_CLOUD_DB_URL_CREDS" in reported
+        assert "SEC_PASSWORD_ASSIGNMENT" in reported
+
+    def test_placeholders_dictionary_words_and_identifiers_are_rejected(self):
+        findings = _engine({
+            "credentials.py": (
+                'API_TOKEN = "your-token-here"\n'
+                'CLIENT_SECRET = "placeholder"\n'
+                'api_key = "asianconstablebutterfly"\n'
+                'request_id = "aB3dE5fG7hI9jK1lM3nO5pQ7rS9tU1vW3xY5"\n'
+            ),
+        })
+        assert not _rules(
+            findings,
+            "SEC_GENERIC_API_KEY",
+            "SEC_PASSWORD_ASSIGNMENT",
+            "SEC_CLOUD_DB_URL_CREDS",
+        )
+
+    def test_generated_urllib3_ca_fixture_is_not_suppressed_elsewhere(self):
+        content = (
+            "-----BEGIN PRIVATE KEY-----\n"
+            "MIIEowIBAAKCAQEA9f8e7d6c5b4a3z2y1x0w8F7s6G5h4J3k\n"
+            "-----END PRIVATE KEY-----\n"
+        )
+        for key_name in ("cacert.key", "server.key"):
+            findings = _engine({
+                f"dummyserver/certs/{key_name}": content
+            })
+            assert not _rules(findings, "SEC_PRIVATE_KEY_HEADER")
+
+        unrelated_path = _engine({"other/certs/cacert.key": content})
+        assert any(
+            f.rule_id == "SEC_PRIVATE_KEY_HEADER" for f in unrelated_path
+        )
+
+        real_key = _engine({"config/private.key": content})
+        assert any(f.rule_id == "SEC_PRIVATE_KEY_HEADER" for f in real_key)
 
 
 class TestXssStaticVsDynamic:

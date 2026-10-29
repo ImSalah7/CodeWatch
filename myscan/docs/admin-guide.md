@@ -1,6 +1,6 @@
-# Admin Guide — MyScan
+# Admin Guide — CodeWatch
 
-Operations guide for the person running MyScan in production.
+Operations guide for the person running CodeWatch in production.
 
 ## 1. Installation
 

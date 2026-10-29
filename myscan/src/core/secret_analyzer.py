@@ -1,4 +1,4 @@
-"""Secret Analyzer for MyScan Enterprise.
+"""Secret Analyzer for CodeWatch.
 
 Analyzes detected secrets to determine their type, strength, risk,
 and context. Provides actionable recommendations for remediation.

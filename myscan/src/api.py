@@ -1,4 +1,4 @@
-"""MyScan REST API.
+"""CodeWatch REST API.
 
 Endpoints:
     POST   /api/v1/scan            - Scan a target path
@@ -362,7 +362,7 @@ def _scan_metadata_dict(job, source: str, job_id: str) -> dict:
             "completed_at": job.completed_at,
             "scan_duration": round(result.scan_duration, 2) if result else 0.0,
             "scanner_version": __version__,
-            "scanner_tool": "MyScan",
+            "scanner_tool": "CodeWatch",
             "enterprise": job.enterprise,
             "files_scanned": summary.get("files_scanned", 0),
             "lines_scanned": summary.get("lines_scanned", 0),
@@ -387,7 +387,7 @@ def _scan_metadata_dict(job, source: str, job_id: str) -> dict:
         "completed_at": job.get("completed_at", ""),
         "scan_duration": round(job.get("scan_duration") or 0.0, 2),
         "scanner_version": result.get("version", __version__),
-        "scanner_tool": "MyScan",
+        "scanner_tool": "CodeWatch",
         "enterprise": bool(job.get("enterprise")),
         "files_scanned": summary.get("files_scanned", 0),
         "lines_scanned": summary.get("lines_scanned", 0),

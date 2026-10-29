@@ -9,6 +9,7 @@ import json
 import tempfile
 from pathlib import Path
 
+from src.core.config import ScanConfig
 from src.core.config_security import (
     CONFIG_RULES,
     ConfigFinding,
@@ -23,6 +24,7 @@ from src.core.dependency_scanner import (
     DependencyScanResult,
     PackageManager,
 )
+from src.core.engine import ScanEngine
 from src.core.file_risk import FileRiskScorer, RiskLevel
 from src.core.function_risk import FunctionRiskLevel, FunctionRiskScorer
 from src.core.performance import (
@@ -512,6 +514,79 @@ class TestPolicyEngine:
 # ============================================================
 
 class TestDependencyScanner:
+    def test_repository_scan_skips_installed_dependency_trees(self):
+        with tempfile.TemporaryDirectory() as tmpdir:
+            root = Path(tmpdir)
+            (root / "requirements.txt").write_text("requests==2.31.0\n")
+            installed = root / "node_modules" / "example-package"
+            installed.mkdir(parents=True)
+            (installed / "package.json").write_text(
+                '{"dependencies": {"requests": "2.19.0"}}\n'
+            )
+
+            results = DependencyScanner().scan_repository(str(root))
+
+            assert [Path(result.file_path).name for result in results] == [
+                "requirements.txt"
+            ]
+            assert {
+                vuln.vulnerability_id
+                for vuln in results[0].vulnerabilities
+            } == {"CVE-2024-35195"}
+
+    def test_requests_cve_2024_35195_versions_and_project_source_detection(self):
+        from src.core.config import ScanConfig
+        from src.core.engine import ScanEngine
+
+        with tempfile.TemporaryDirectory() as tmpdir:
+            root = Path(tmpdir)
+            (root / "setup.py").write_text('setup(name=about["__title__"])\n')
+            package = root / "requests"
+            package.mkdir()
+            version_file = package / "__version__.py"
+            version_file.write_text(
+                '__title__ = "requests"\n__version__ = "2.31.0"\n'
+            )
+
+            results = DependencyScanner().scan_repository(str(root))
+            source_vulns = [
+                vuln
+                for scan in results
+                for vuln in scan.vulnerabilities
+                if vuln.vulnerability_id == "CVE-2024-35195"
+            ]
+            assert len(source_vulns) == 1
+            assert source_vulns[0].fixed_version == "2.32.0"
+
+            engine = ScanEngine(ScanConfig(
+                skip_security=True, skip_quality=True, skip_secrets=True,
+            ))
+            scan_result = engine.scan(str(root))
+            findings = [
+                finding for finding in scan_result.dependency_findings
+                if finding.rule_id == "DEP_CVE_2024_35195"
+            ]
+            assert len(findings) == 1
+            assert findings[0].location.line == 2
+            assert findings[0].severity.value == "medium"
+            assert scan_result.to_dict()["summary"]["dependency_findings"] >= 1
+
+            skipped_result = ScanEngine(ScanConfig(
+                skip_security=True, skip_quality=True, skip_secrets=True,
+                skip_deps=True,
+            )).scan(str(root))
+            assert not skipped_result.dependency_findings
+
+        with tempfile.TemporaryDirectory() as tmpdir:
+            req_file = Path(tmpdir) / "requirements.txt"
+            req_file.write_text("requests==2.32.0\n")
+            result = DependencyScanner().scan_file(str(req_file))
+            assert result is not None
+            assert not [
+                vuln for vuln in result.vulnerabilities
+                if vuln.vulnerability_id == "CVE-2024-35195"
+            ]
+
     def test_scan_requirements_txt(self):
         with tempfile.TemporaryDirectory() as tmpdir:
             req_file = Path(tmpdir) / "requirements.txt"
@@ -521,6 +596,45 @@ class TestDependencyScanner:
             assert result is not None
             assert result.total_dependencies == 3
             assert result.package_manager == PackageManager.PIP
+
+    def test_requirements_preserve_version_constraints(self):
+        with tempfile.TemporaryDirectory() as tmpdir:
+            req_file = Path(tmpdir) / "requirements.txt"
+            req_file.write_text("requests==2.31.0\njinja2>=3.1.0,<4.0\n")
+            result = DependencyScanner().scan_file(str(req_file))
+            assert result is not None
+            dependencies = {dep.name: dep for dep in result.dependencies}
+            assert dependencies["requests"].version == "2.31.0"
+            assert dependencies["requests"].version_specifier == "==2.31.0"
+            assert dependencies["jinja2"].version == "3.1.0"
+            assert dependencies["jinja2"].version_specifier == ">=3.1.0,<4.0"
+            jinja_vuln = next(v for v in result.vulnerabilities if v.dependency_name == "jinja2")
+            assert jinja_vuln.dependency_specifier == ">=3.1.0,<4.0"
+
+    def test_pyproject_preserves_version_constraints(self):
+        with tempfile.TemporaryDirectory() as tmpdir:
+            project_file = Path(tmpdir) / "pyproject.toml"
+            project_file.write_text(
+                '[project]\ndependencies = ["jinja2>=3.1.0,<4.0"]\n'
+            )
+            result = DependencyScanner().scan_file(str(project_file))
+            assert result is not None
+            dependency = next(dep for dep in result.dependencies if dep.name == "jinja2")
+            assert dependency.version == "3.1.0"
+            assert dependency.version_specifier == ">=3.1.0,<4.0"
+
+    def test_dependency_finding_describes_range_as_potential_overlap(self):
+        with tempfile.TemporaryDirectory() as tmpdir:
+            root = Path(tmpdir)
+            (root / "requirements.txt").write_text("jinja2>=3.1.0,<4.0\n")
+            result = ScanEngine(ScanConfig(
+                skip_security=True,
+                skip_quality=True,
+                skip_secrets=True,
+            )).scan(str(root))
+            finding = next(f for f in result.findings if f.rule_id == "DEP_CVE_2024_22195")
+            assert "declares version constraint >=3.1.0,<4.0" in finding.description
+            assert finding.location.code_snippet == "jinja2>=3.1.0,<4.0"
 
     def test_known_vulnerabilities_detected(self):
         with tempfile.TemporaryDirectory() as tmpdir:
@@ -575,7 +689,7 @@ class TestDependencyScanner:
         with tempfile.TemporaryDirectory() as tmpdir:
             req_file = Path(tmpdir) / "requirements.txt"
             req_file.write_text(
-                "requests==2.20.0\nrequests==2.28.0\nflask==1.0\npyyaml==5.4\n"
+                "requests==2.32.0\nrequests==2.33.0\nflask==1.0\npyyaml==5.4\n"
                 "urllib3==1.26.6\n"
             )
             scanner = DependencyScanner()
@@ -592,9 +706,16 @@ class TestDependencyScanner:
             result = scanner.scan_file(str(req_file))
             assert result is not None
             vulns = [v for v in result.vulnerabilities if v.dependency_name == "requests"]
-            assert len(vulns) == 1
-            assert vulns[0].vulnerability_id == "CVE-2018-18074"
-            assert vulns[0].fixed_version == "2.20.0"
+            assert {v.vulnerability_id for v in vulns} == {
+                "CVE-2018-18074",
+                "CVE-2024-35195",
+            }
+            assert {
+                v.vulnerability_id: v.fixed_version for v in vulns
+            } == {
+                "CVE-2018-18074": "2.20.0",
+                "CVE-2024-35195": "2.32.0",
+            }
 
     def test_upper_bound_excludes_fixed_version(self):
         with tempfile.TemporaryDirectory() as tmpdir:
@@ -610,7 +731,7 @@ class TestDependencyScanner:
     def test_lower_bound_ranges_not_flagged(self):
         with tempfile.TemporaryDirectory() as tmpdir:
             req_file = Path(tmpdir) / "requirements.txt"
-            req_file.write_text("requests>=2.20.0\nrequests==2.20.0,<3.0\n")
+            req_file.write_text("requests>=2.32.0\nrequests==2.32.0,<3.0\n")
             scanner = DependencyScanner()
             result = scanner.scan_file(str(req_file))
             assert result is not None

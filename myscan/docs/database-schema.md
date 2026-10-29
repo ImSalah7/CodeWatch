@@ -1,4 +1,4 @@
-# Database Schema — MyScan (SQLite)
+# Database Schema — CodeWatch (SQLite)
 
 > Source: `src/store.py` · Engine: SQLite in WAL mode · Path: `MYSCAN_DB` (default `src/myscan.db`)
 

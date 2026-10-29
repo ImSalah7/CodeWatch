@@ -1,0 +1,1051 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>MyScan UI Security Test</title>
+<style>
+:root{font-family:Inter,Arial,sans-serif;background:#0f172a;color:#e2e8f0}
+*{box-sizing:border-box}body{margin:0;background:#0f172a}
+header{padding:24px 6%;border-bottom:1px solid #334155}
+main{max-width:1100px;margin:auto;padding:40px 6%}
+.card{background:#1e293b;border:1px solid #334155;border-radius:14px;padding:24px;margin:20px 0}
+.grid{display:grid;grid-template-columns:repeat(3,1fr);gap:18px}
+button{padding:12px 18px;border:0;border-radius:8px;background:#38bdf8;color:#082f49}
+input{padding:12px;width:100%;border-radius:8px;border:1px solid #475569;background:#0f172a;color:white}
+small{color:#94a3b8}
+@media(max-width:700px){.grid{grid-template-columns:1fr}}
+</style>
+</head>
+<body>
+<header><h1>MyScan Test Dashboard</h1><small>Safe SAST credential-detection fixture</small></header>
+<main>
+<section class="card"><h2>Application Overview</h2><p>This page contains normal UI code plus one intentionally fake credential for scanner validation.</p></section>
+<section class="grid">
+<div class="card"><h3>Projects</h3><p>24 active projects</p></div>
+<div class="card"><h3>Scans</h3><p>138 completed scans</p></div>
+<div class="card"><h3>Findings</h3><p>7 open findings</p></div>
+</section>
+<section class="card">
+<h2>Search</h2>
+<input id="search" placeholder="Search projects">
+<button onclick="runSearch()">Search</button>
+<p id="result"></p>
+</section>
+<script>
+const appName = "MyScan Demo";
+const environment = "development";
+
+/*
+ * INTENTIONALLY FAKE TEST CREDENTIAL.
+ * It is random, non-functional, and exists only to test MyScan.
+ */
+const SERVICE_API_KEY = "mscan_test_7Hq2K9vP4xL8nR3sW6cD1fG5jA0";
+
+function runSearch(){
+  const value=document.getElementById("search").value;
+  document.getElementById("result").textContent="Searching for: "+value;
+}
+
+const uiText1 = 'Dashboard section 1';
+function renderSection2() { return uiText2; }
+const metric3 = 3;
+document.documentElement.dataset.section4 = 'test';
+// UI test component 5
+const uiText6 = 'Dashboard section 6';
+function renderSection7() { return uiText7; }
+const metric8 = 8;
+document.documentElement.dataset.section9 = 'test';
+// UI test component 10
+const uiText11 = 'Dashboard section 11';
+function renderSection12() { return uiText12; }
+const metric13 = 13;
+document.documentElement.dataset.section14 = 'test';
+// UI test component 15
+const uiText16 = 'Dashboard section 16';
+function renderSection17() { return uiText17; }
+const metric18 = 18;
+document.documentElement.dataset.section19 = 'test';
+// UI test component 20
+const uiText21 = 'Dashboard section 21';
+function renderSection22() { return uiText22; }
+const metric23 = 23;
+document.documentElement.dataset.section24 = 'test';
+// UI test component 25
+const uiText26 = 'Dashboard section 26';
+function renderSection27() { return uiText27; }
+const metric28 = 28;
+document.documentElement.dataset.section29 = 'test';
+// UI test component 30
+const uiText31 = 'Dashboard section 31';
+function renderSection32() { return uiText32; }
+const metric33 = 33;
+document.documentElement.dataset.section34 = 'test';
+// UI test component 35
+const uiText36 = 'Dashboard section 36';
+function renderSection37() { return uiText37; }
+const metric38 = 38;
+document.documentElement.dataset.section39 = 'test';
+// UI test component 40
+const uiText41 = 'Dashboard section 41';
+function renderSection42() { return uiText42; }
+const metric43 = 43;
+document.documentElement.dataset.section44 = 'test';
+// UI test component 45
+const uiText46 = 'Dashboard section 46';
+function renderSection47() { return uiText47; }
+const metric48 = 48;
+document.documentElement.dataset.section49 = 'test';
+// UI test component 50
+const uiText51 = 'Dashboard section 51';
+function renderSection52() { return uiText52; }
+const metric53 = 53;
+document.documentElement.dataset.section54 = 'test';
+// UI test component 55
+const uiText56 = 'Dashboard section 56';
+function renderSection57() { return uiText57; }
+const metric58 = 58;
+document.documentElement.dataset.section59 = 'test';
+// UI test component 60
+const uiText61 = 'Dashboard section 61';
+function renderSection62() { return uiText62; }
+const metric63 = 63;
+document.documentElement.dataset.section64 = 'test';
+// UI test component 65
+const uiText66 = 'Dashboard section 66';
+function renderSection67() { return uiText67; }
+const metric68 = 68;
+document.documentElement.dataset.section69 = 'test';
+// UI test component 70
+const uiText71 = 'Dashboard section 71';
+function renderSection72() { return uiText72; }
+const metric73 = 73;
+document.documentElement.dataset.section74 = 'test';
+// UI test component 75
+const uiText76 = 'Dashboard section 76';
+function renderSection77() { return uiText77; }
+const metric78 = 78;
+document.documentElement.dataset.section79 = 'test';
+// UI test component 80
+const uiText81 = 'Dashboard section 81';
+function renderSection82() { return uiText82; }
+const metric83 = 83;
+document.documentElement.dataset.section84 = 'test';
+// UI test component 85
+const uiText86 = 'Dashboard section 86';
+function renderSection87() { return uiText87; }
+const metric88 = 88;
+document.documentElement.dataset.section89 = 'test';
+// UI test component 90
+const uiText91 = 'Dashboard section 91';
+function renderSection92() { return uiText92; }
+const metric93 = 93;
+document.documentElement.dataset.section94 = 'test';
+// UI test component 95
+const uiText96 = 'Dashboard section 96';
+function renderSection97() { return uiText97; }
+const metric98 = 98;
+document.documentElement.dataset.section99 = 'test';
+// UI test component 100
+const uiText101 = 'Dashboard section 101';
+function renderSection102() { return uiText102; }
+const metric103 = 3;
+document.documentElement.dataset.section104 = 'test';
+// UI test component 105
+const uiText106 = 'Dashboard section 106';
+function renderSection107() { return uiText107; }
+const metric108 = 8;
+document.documentElement.dataset.section109 = 'test';
+// UI test component 110
+const uiText111 = 'Dashboard section 111';
+function renderSection112() { return uiText112; }
+const metric113 = 13;
+document.documentElement.dataset.section114 = 'test';
+// UI test component 115
+const uiText116 = 'Dashboard section 116';
+function renderSection117() { return uiText117; }
+const metric118 = 18;
+document.documentElement.dataset.section119 = 'test';
+// UI test component 120
+const uiText121 = 'Dashboard section 121';
+function renderSection122() { return uiText122; }
+const metric123 = 23;
+document.documentElement.dataset.section124 = 'test';
+// UI test component 125
+const uiText126 = 'Dashboard section 126';
+function renderSection127() { return uiText127; }
+const metric128 = 28;
+document.documentElement.dataset.section129 = 'test';
+// UI test component 130
+const uiText131 = 'Dashboard section 131';
+function renderSection132() { return uiText132; }
+const metric133 = 33;
+document.documentElement.dataset.section134 = 'test';
+// UI test component 135
+const uiText136 = 'Dashboard section 136';
+function renderSection137() { return uiText137; }
+const metric138 = 38;
+document.documentElement.dataset.section139 = 'test';
+// UI test component 140
+const uiText141 = 'Dashboard section 141';
+function renderSection142() { return uiText142; }
+const metric143 = 43;
+document.documentElement.dataset.section144 = 'test';
+// UI test component 145
+const uiText146 = 'Dashboard section 146';
+function renderSection147() { return uiText147; }
+const metric148 = 48;
+document.documentElement.dataset.section149 = 'test';
+// UI test component 150
+const uiText151 = 'Dashboard section 151';
+function renderSection152() { return uiText152; }
+const metric153 = 53;
+document.documentElement.dataset.section154 = 'test';
+// UI test component 155
+const uiText156 = 'Dashboard section 156';
+function renderSection157() { return uiText157; }
+const metric158 = 58;
+document.documentElement.dataset.section159 = 'test';
+// UI test component 160
+const uiText161 = 'Dashboard section 161';
+function renderSection162() { return uiText162; }
+const metric163 = 63;
+document.documentElement.dataset.section164 = 'test';
+// UI test component 165
+const uiText166 = 'Dashboard section 166';
+function renderSection167() { return uiText167; }
+const metric168 = 68;
+document.documentElement.dataset.section169 = 'test';
+// UI test component 170
+const uiText171 = 'Dashboard section 171';
+function renderSection172() { return uiText172; }
+const metric173 = 73;
+document.documentElement.dataset.section174 = 'test';
+// UI test component 175
+const uiText176 = 'Dashboard section 176';
+function renderSection177() { return uiText177; }
+const metric178 = 78;
+document.documentElement.dataset.section179 = 'test';
+// UI test component 180
+const uiText181 = 'Dashboard section 181';
+function renderSection182() { return uiText182; }
+const metric183 = 83;
+document.documentElement.dataset.section184 = 'test';
+// UI test component 185
+const uiText186 = 'Dashboard section 186';
+function renderSection187() { return uiText187; }
+const metric188 = 88;
+document.documentElement.dataset.section189 = 'test';
+// UI test component 190
+const uiText191 = 'Dashboard section 191';
+function renderSection192() { return uiText192; }
+const metric193 = 93;
+document.documentElement.dataset.section194 = 'test';
+// UI test component 195
+const uiText196 = 'Dashboard section 196';
+function renderSection197() { return uiText197; }
+const metric198 = 98;
+document.documentElement.dataset.section199 = 'test';
+// UI test component 200
+const uiText201 = 'Dashboard section 201';
+function renderSection202() { return uiText202; }
+const metric203 = 3;
+document.documentElement.dataset.section204 = 'test';
+// UI test component 205
+const uiText206 = 'Dashboard section 206';
+function renderSection207() { return uiText207; }
+const metric208 = 8;
+document.documentElement.dataset.section209 = 'test';
+// UI test component 210
+const uiText211 = 'Dashboard section 211';
+function renderSection212() { return uiText212; }
+const metric213 = 13;
+document.documentElement.dataset.section214 = 'test';
+// UI test component 215
+const uiText216 = 'Dashboard section 216';
+function renderSection217() { return uiText217; }
+const metric218 = 18;
+document.documentElement.dataset.section219 = 'test';
+// UI test component 220
+const uiText221 = 'Dashboard section 221';
+function renderSection222() { return uiText222; }
+const metric223 = 23;
+document.documentElement.dataset.section224 = 'test';
+// UI test component 225
+const uiText226 = 'Dashboard section 226';
+function renderSection227() { return uiText227; }
+const metric228 = 28;
+document.documentElement.dataset.section229 = 'test';
+// UI test component 230
+const uiText231 = 'Dashboard section 231';
+function renderSection232() { return uiText232; }
+const metric233 = 33;
+document.documentElement.dataset.section234 = 'test';
+// UI test component 235
+const uiText236 = 'Dashboard section 236';
+function renderSection237() { return uiText237; }
+const metric238 = 38;
+document.documentElement.dataset.section239 = 'test';
+// UI test component 240
+const uiText241 = 'Dashboard section 241';
+function renderSection242() { return uiText242; }
+const metric243 = 43;
+document.documentElement.dataset.section244 = 'test';
+// UI test component 245
+const uiText246 = 'Dashboard section 246';
+function renderSection247() { return uiText247; }
+const metric248 = 48;
+document.documentElement.dataset.section249 = 'test';
+// UI test component 250
+const uiText251 = 'Dashboard section 251';
+function renderSection252() { return uiText252; }
+const metric253 = 53;
+document.documentElement.dataset.section254 = 'test';
+// UI test component 255
+const uiText256 = 'Dashboard section 256';
+function renderSection257() { return uiText257; }
+const metric258 = 58;
+document.documentElement.dataset.section259 = 'test';
+// UI test component 260
+const uiText261 = 'Dashboard section 261';
+function renderSection262() { return uiText262; }
+const metric263 = 63;
+document.documentElement.dataset.section264 = 'test';
+// UI test component 265
+const uiText266 = 'Dashboard section 266';
+function renderSection267() { return uiText267; }
+const metric268 = 68;
+document.documentElement.dataset.section269 = 'test';
+// UI test component 270
+const uiText271 = 'Dashboard section 271';
+function renderSection272() { return uiText272; }
+const metric273 = 73;
+document.documentElement.dataset.section274 = 'test';
+// UI test component 275
+const uiText276 = 'Dashboard section 276';
+function renderSection277() { return uiText277; }
+const metric278 = 78;
+document.documentElement.dataset.section279 = 'test';
+// UI test component 280
+const uiText281 = 'Dashboard section 281';
+function renderSection282() { return uiText282; }
+const metric283 = 83;
+document.documentElement.dataset.section284 = 'test';
+// UI test component 285
+const uiText286 = 'Dashboard section 286';
+function renderSection287() { return uiText287; }
+const metric288 = 88;
+document.documentElement.dataset.section289 = 'test';
+// UI test component 290
+const uiText291 = 'Dashboard section 291';
+function renderSection292() { return uiText292; }
+const metric293 = 93;
+document.documentElement.dataset.section294 = 'test';
+// UI test component 295
+const uiText296 = 'Dashboard section 296';
+function renderSection297() { return uiText297; }
+const metric298 = 98;
+document.documentElement.dataset.section299 = 'test';
+// UI test component 300
+const uiText301 = 'Dashboard section 301';
+function renderSection302() { return uiText302; }
+const metric303 = 3;
+document.documentElement.dataset.section304 = 'test';
+// UI test component 305
+const uiText306 = 'Dashboard section 306';
+function renderSection307() { return uiText307; }
+const metric308 = 8;
+document.documentElement.dataset.section309 = 'test';
+// UI test component 310
+const uiText311 = 'Dashboard section 311';
+function renderSection312() { return uiText312; }
+const metric313 = 13;
+document.documentElement.dataset.section314 = 'test';
+// UI test component 315
+const uiText316 = 'Dashboard section 316';
+function renderSection317() { return uiText317; }
+const metric318 = 18;
+document.documentElement.dataset.section319 = 'test';
+// UI test component 320
+const uiText321 = 'Dashboard section 321';
+function renderSection322() { return uiText322; }
+const metric323 = 23;
+document.documentElement.dataset.section324 = 'test';
+// UI test component 325
+const uiText326 = 'Dashboard section 326';
+function renderSection327() { return uiText327; }
+const metric328 = 28;
+document.documentElement.dataset.section329 = 'test';
+// UI test component 330
+const uiText331 = 'Dashboard section 331';
+function renderSection332() { return uiText332; }
+const metric333 = 33;
+document.documentElement.dataset.section334 = 'test';
+// UI test component 335
+const uiText336 = 'Dashboard section 336';
+function renderSection337() { return uiText337; }
+const metric338 = 38;
+document.documentElement.dataset.section339 = 'test';
+// UI test component 340
+const uiText341 = 'Dashboard section 341';
+function renderSection342() { return uiText342; }
+const metric343 = 43;
+document.documentElement.dataset.section344 = 'test';
+// UI test component 345
+const uiText346 = 'Dashboard section 346';
+function renderSection347() { return uiText347; }
+const metric348 = 48;
+document.documentElement.dataset.section349 = 'test';
+// UI test component 350
+const uiText351 = 'Dashboard section 351';
+function renderSection352() { return uiText352; }
+const metric353 = 53;
+document.documentElement.dataset.section354 = 'test';
+// UI test component 355
+const uiText356 = 'Dashboard section 356';
+function renderSection357() { return uiText357; }
+const metric358 = 58;
+document.documentElement.dataset.section359 = 'test';
+// UI test component 360
+const uiText361 = 'Dashboard section 361';
+function renderSection362() { return uiText362; }
+const metric363 = 63;
+document.documentElement.dataset.section364 = 'test';
+// UI test component 365
+const uiText366 = 'Dashboard section 366';
+function renderSection367() { return uiText367; }
+const metric368 = 68;
+document.documentElement.dataset.section369 = 'test';
+// UI test component 370
+const uiText371 = 'Dashboard section 371';
+function renderSection372() { return uiText372; }
+const metric373 = 73;
+document.documentElement.dataset.section374 = 'test';
+// UI test component 375
+const uiText376 = 'Dashboard section 376';
+function renderSection377() { return uiText377; }
+const metric378 = 78;
+document.documentElement.dataset.section379 = 'test';
+// UI test component 380
+const uiText381 = 'Dashboard section 381';
+function renderSection382() { return uiText382; }
+const metric383 = 83;
+document.documentElement.dataset.section384 = 'test';
+// UI test component 385
+const uiText386 = 'Dashboard section 386';
+function renderSection387() { return uiText387; }
+const metric388 = 88;
+document.documentElement.dataset.section389 = 'test';
+// UI test component 390
+const uiText391 = 'Dashboard section 391';
+function renderSection392() { return uiText392; }
+const metric393 = 93;
+document.documentElement.dataset.section394 = 'test';
+// UI test component 395
+const uiText396 = 'Dashboard section 396';
+function renderSection397() { return uiText397; }
+const metric398 = 98;
+document.documentElement.dataset.section399 = 'test';
+// UI test component 400
+const uiText401 = 'Dashboard section 401';
+function renderSection402() { return uiText402; }
+const metric403 = 3;
+document.documentElement.dataset.section404 = 'test';
+// UI test component 405
+const uiText406 = 'Dashboard section 406';
+function renderSection407() { return uiText407; }
+const metric408 = 8;
+document.documentElement.dataset.section409 = 'test';
+// UI test component 410
+const uiText411 = 'Dashboard section 411';
+function renderSection412() { return uiText412; }
+const metric413 = 13;
+document.documentElement.dataset.section414 = 'test';
+// UI test component 415
+const uiText416 = 'Dashboard section 416';
+function renderSection417() { return uiText417; }
+const metric418 = 18;
+document.documentElement.dataset.section419 = 'test';
+// UI test component 420
+const uiText421 = 'Dashboard section 421';
+function renderSection422() { return uiText422; }
+const metric423 = 23;
+document.documentElement.dataset.section424 = 'test';
+// UI test component 425
+const uiText426 = 'Dashboard section 426';
+function renderSection427() { return uiText427; }
+const metric428 = 28;
+document.documentElement.dataset.section429 = 'test';
+// UI test component 430
+const uiText431 = 'Dashboard section 431';
+function renderSection432() { return uiText432; }
+const metric433 = 33;
+document.documentElement.dataset.section434 = 'test';
+// UI test component 435
+const uiText436 = 'Dashboard section 436';
+function renderSection437() { return uiText437; }
+const metric438 = 38;
+document.documentElement.dataset.section439 = 'test';
+// UI test component 440
+const uiText441 = 'Dashboard section 441';
+function renderSection442() { return uiText442; }
+const metric443 = 43;
+document.documentElement.dataset.section444 = 'test';
+// UI test component 445
+const uiText446 = 'Dashboard section 446';
+function renderSection447() { return uiText447; }
+const metric448 = 48;
+document.documentElement.dataset.section449 = 'test';
+// UI test component 450
+const uiText451 = 'Dashboard section 451';
+function renderSection452() { return uiText452; }
+const metric453 = 53;
+document.documentElement.dataset.section454 = 'test';
+// UI test component 455
+const uiText456 = 'Dashboard section 456';
+function renderSection457() { return uiText457; }
+const metric458 = 58;
+document.documentElement.dataset.section459 = 'test';
+// UI test component 460
+const uiText461 = 'Dashboard section 461';
+function renderSection462() { return uiText462; }
+const metric463 = 63;
+document.documentElement.dataset.section464 = 'test';
+// UI test component 465
+const uiText466 = 'Dashboard section 466';
+function renderSection467() { return uiText467; }
+const metric468 = 68;
+document.documentElement.dataset.section469 = 'test';
+// UI test component 470
+const uiText471 = 'Dashboard section 471';
+function renderSection472() { return uiText472; }
+const metric473 = 73;
+document.documentElement.dataset.section474 = 'test';
+// UI test component 475
+const uiText476 = 'Dashboard section 476';
+function renderSection477() { return uiText477; }
+const metric478 = 78;
+document.documentElement.dataset.section479 = 'test';
+// UI test component 480
+const uiText481 = 'Dashboard section 481';
+function renderSection482() { return uiText482; }
+const metric483 = 83;
+document.documentElement.dataset.section484 = 'test';
+// UI test component 485
+const uiText486 = 'Dashboard section 486';
+function renderSection487() { return uiText487; }
+const metric488 = 88;
+document.documentElement.dataset.section489 = 'test';
+// UI test component 490
+const uiText491 = 'Dashboard section 491';
+function renderSection492() { return uiText492; }
+const metric493 = 93;
+document.documentElement.dataset.section494 = 'test';
+// UI test component 495
+const uiText496 = 'Dashboard section 496';
+function renderSection497() { return uiText497; }
+const metric498 = 98;
+document.documentElement.dataset.section499 = 'test';
+// UI test component 500
+const uiText501 = 'Dashboard section 501';
+function renderSection502() { return uiText502; }
+const metric503 = 3;
+document.documentElement.dataset.section504 = 'test';
+// UI test component 505
+const uiText506 = 'Dashboard section 506';
+function renderSection507() { return uiText507; }
+const metric508 = 8;
+document.documentElement.dataset.section509 = 'test';
+// UI test component 510
+const uiText511 = 'Dashboard section 511';
+function renderSection512() { return uiText512; }
+const metric513 = 13;
+document.documentElement.dataset.section514 = 'test';
+// UI test component 515
+const uiText516 = 'Dashboard section 516';
+function renderSection517() { return uiText517; }
+const metric518 = 18;
+document.documentElement.dataset.section519 = 'test';
+// UI test component 520
+const uiText521 = 'Dashboard section 521';
+function renderSection522() { return uiText522; }
+const metric523 = 23;
+document.documentElement.dataset.section524 = 'test';
+// UI test component 525
+const uiText526 = 'Dashboard section 526';
+function renderSection527() { return uiText527; }
+const metric528 = 28;
+document.documentElement.dataset.section529 = 'test';
+// UI test component 530
+const uiText531 = 'Dashboard section 531';
+function renderSection532() { return uiText532; }
+const metric533 = 33;
+document.documentElement.dataset.section534 = 'test';
+// UI test component 535
+const uiText536 = 'Dashboard section 536';
+function renderSection537() { return uiText537; }
+const metric538 = 38;
+document.documentElement.dataset.section539 = 'test';
+// UI test component 540
+const uiText541 = 'Dashboard section 541';
+function renderSection542() { return uiText542; }
+const metric543 = 43;
+document.documentElement.dataset.section544 = 'test';
+// UI test component 545
+const uiText546 = 'Dashboard section 546';
+function renderSection547() { return uiText547; }
+const metric548 = 48;
+document.documentElement.dataset.section549 = 'test';
+// UI test component 550
+const uiText551 = 'Dashboard section 551';
+function renderSection552() { return uiText552; }
+const metric553 = 53;
+document.documentElement.dataset.section554 = 'test';
+// UI test component 555
+const uiText556 = 'Dashboard section 556';
+function renderSection557() { return uiText557; }
+const metric558 = 58;
+document.documentElement.dataset.section559 = 'test';
+// UI test component 560
+const uiText561 = 'Dashboard section 561';
+function renderSection562() { return uiText562; }
+const metric563 = 63;
+document.documentElement.dataset.section564 = 'test';
+// UI test component 565
+const uiText566 = 'Dashboard section 566';
+function renderSection567() { return uiText567; }
+const metric568 = 68;
+document.documentElement.dataset.section569 = 'test';
+// UI test component 570
+const uiText571 = 'Dashboard section 571';
+function renderSection572() { return uiText572; }
+const metric573 = 73;
+document.documentElement.dataset.section574 = 'test';
+// UI test component 575
+const uiText576 = 'Dashboard section 576';
+function renderSection577() { return uiText577; }
+const metric578 = 78;
+document.documentElement.dataset.section579 = 'test';
+// UI test component 580
+const uiText581 = 'Dashboard section 581';
+function renderSection582() { return uiText582; }
+const metric583 = 83;
+document.documentElement.dataset.section584 = 'test';
+// UI test component 585
+const uiText586 = 'Dashboard section 586';
+function renderSection587() { return uiText587; }
+const metric588 = 88;
+document.documentElement.dataset.section589 = 'test';
+// UI test component 590
+const uiText591 = 'Dashboard section 591';
+function renderSection592() { return uiText592; }
+const metric593 = 93;
+document.documentElement.dataset.section594 = 'test';
+// UI test component 595
+const uiText596 = 'Dashboard section 596';
+function renderSection597() { return uiText597; }
+const metric598 = 98;
+document.documentElement.dataset.section599 = 'test';
+// UI test component 600
+const uiText601 = 'Dashboard section 601';
+function renderSection602() { return uiText602; }
+const metric603 = 3;
+document.documentElement.dataset.section604 = 'test';
+// UI test component 605
+const uiText606 = 'Dashboard section 606';
+function renderSection607() { return uiText607; }
+const metric608 = 8;
+document.documentElement.dataset.section609 = 'test';
+// UI test component 610
+const uiText611 = 'Dashboard section 611';
+function renderSection612() { return uiText612; }
+const metric613 = 13;
+document.documentElement.dataset.section614 = 'test';
+// UI test component 615
+const uiText616 = 'Dashboard section 616';
+function renderSection617() { return uiText617; }
+const metric618 = 18;
+document.documentElement.dataset.section619 = 'test';
+// UI test component 620
+const uiText621 = 'Dashboard section 621';
+function renderSection622() { return uiText622; }
+const metric623 = 23;
+document.documentElement.dataset.section624 = 'test';
+// UI test component 625
+const uiText626 = 'Dashboard section 626';
+function renderSection627() { return uiText627; }
+const metric628 = 28;
+document.documentElement.dataset.section629 = 'test';
+// UI test component 630
+const uiText631 = 'Dashboard section 631';
+function renderSection632() { return uiText632; }
+const metric633 = 33;
+document.documentElement.dataset.section634 = 'test';
+// UI test component 635
+const uiText636 = 'Dashboard section 636';
+function renderSection637() { return uiText637; }
+const metric638 = 38;
+document.documentElement.dataset.section639 = 'test';
+// UI test component 640
+const uiText641 = 'Dashboard section 641';
+function renderSection642() { return uiText642; }
+const metric643 = 43;
+document.documentElement.dataset.section644 = 'test';
+// UI test component 645
+const uiText646 = 'Dashboard section 646';
+function renderSection647() { return uiText647; }
+const metric648 = 48;
+document.documentElement.dataset.section649 = 'test';
+// UI test component 650
+const uiText651 = 'Dashboard section 651';
+function renderSection652() { return uiText652; }
+const metric653 = 53;
+document.documentElement.dataset.section654 = 'test';
+// UI test component 655
+const uiText656 = 'Dashboard section 656';
+function renderSection657() { return uiText657; }
+const metric658 = 58;
+document.documentElement.dataset.section659 = 'test';
+// UI test component 660
+const uiText661 = 'Dashboard section 661';
+function renderSection662() { return uiText662; }
+const metric663 = 63;
+document.documentElement.dataset.section664 = 'test';
+// UI test component 665
+const uiText666 = 'Dashboard section 666';
+function renderSection667() { return uiText667; }
+const metric668 = 68;
+document.documentElement.dataset.section669 = 'test';
+// UI test component 670
+const uiText671 = 'Dashboard section 671';
+function renderSection672() { return uiText672; }
+const metric673 = 73;
+document.documentElement.dataset.section674 = 'test';
+// UI test component 675
+const uiText676 = 'Dashboard section 676';
+function renderSection677() { return uiText677; }
+const metric678 = 78;
+document.documentElement.dataset.section679 = 'test';
+// UI test component 680
+const uiText681 = 'Dashboard section 681';
+function renderSection682() { return uiText682; }
+const metric683 = 83;
+document.documentElement.dataset.section684 = 'test';
+// UI test component 685
+const uiText686 = 'Dashboard section 686';
+function renderSection687() { return uiText687; }
+const metric688 = 88;
+document.documentElement.dataset.section689 = 'test';
+// UI test component 690
+const uiText691 = 'Dashboard section 691';
+function renderSection692() { return uiText692; }
+const metric693 = 93;
+document.documentElement.dataset.section694 = 'test';
+// UI test component 695
+const uiText696 = 'Dashboard section 696';
+function renderSection697() { return uiText697; }
+const metric698 = 98;
+document.documentElement.dataset.section699 = 'test';
+// UI test component 700
+const uiText701 = 'Dashboard section 701';
+function renderSection702() { return uiText702; }
+const metric703 = 3;
+document.documentElement.dataset.section704 = 'test';
+// UI test component 705
+const uiText706 = 'Dashboard section 706';
+function renderSection707() { return uiText707; }
+const metric708 = 8;
+document.documentElement.dataset.section709 = 'test';
+// UI test component 710
+const uiText711 = 'Dashboard section 711';
+function renderSection712() { return uiText712; }
+const metric713 = 13;
+document.documentElement.dataset.section714 = 'test';
+// UI test component 715
+const uiText716 = 'Dashboard section 716';
+function renderSection717() { return uiText717; }
+const metric718 = 18;
+document.documentElement.dataset.section719 = 'test';
+// UI test component 720
+const uiText721 = 'Dashboard section 721';
+function renderSection722() { return uiText722; }
+const metric723 = 23;
+document.documentElement.dataset.section724 = 'test';
+// UI test component 725
+const uiText726 = 'Dashboard section 726';
+function renderSection727() { return uiText727; }
+const metric728 = 28;
+document.documentElement.dataset.section729 = 'test';
+// UI test component 730
+const uiText731 = 'Dashboard section 731';
+function renderSection732() { return uiText732; }
+const metric733 = 33;
+document.documentElement.dataset.section734 = 'test';
+// UI test component 735
+const uiText736 = 'Dashboard section 736';
+function renderSection737() { return uiText737; }
+const metric738 = 38;
+document.documentElement.dataset.section739 = 'test';
+// UI test component 740
+const uiText741 = 'Dashboard section 741';
+function renderSection742() { return uiText742; }
+const metric743 = 43;
+document.documentElement.dataset.section744 = 'test';
+// UI test component 745
+const uiText746 = 'Dashboard section 746';
+function renderSection747() { return uiText747; }
+const metric748 = 48;
+document.documentElement.dataset.section749 = 'test';
+// UI test component 750
+const uiText751 = 'Dashboard section 751';
+function renderSection752() { return uiText752; }
+const metric753 = 53;
+document.documentElement.dataset.section754 = 'test';
+// UI test component 755
+const uiText756 = 'Dashboard section 756';
+function renderSection757() { return uiText757; }
+const metric758 = 58;
+document.documentElement.dataset.section759 = 'test';
+// UI test component 760
+const uiText761 = 'Dashboard section 761';
+function renderSection762() { return uiText762; }
+const metric763 = 63;
+document.documentElement.dataset.section764 = 'test';
+// UI test component 765
+const uiText766 = 'Dashboard section 766';
+function renderSection767() { return uiText767; }
+const metric768 = 68;
+document.documentElement.dataset.section769 = 'test';
+// UI test component 770
+const uiText771 = 'Dashboard section 771';
+function renderSection772() { return uiText772; }
+const metric773 = 73;
+document.documentElement.dataset.section774 = 'test';
+// UI test component 775
+const uiText776 = 'Dashboard section 776';
+function renderSection777() { return uiText777; }
+const metric778 = 78;
+document.documentElement.dataset.section779 = 'test';
+// UI test component 780
+const uiText781 = 'Dashboard section 781';
+function renderSection782() { return uiText782; }
+const metric783 = 83;
+document.documentElement.dataset.section784 = 'test';
+// UI test component 785
+const uiText786 = 'Dashboard section 786';
+function renderSection787() { return uiText787; }
+const metric788 = 88;
+document.documentElement.dataset.section789 = 'test';
+// UI test component 790
+const uiText791 = 'Dashboard section 791';
+function renderSection792() { return uiText792; }
+const metric793 = 93;
+document.documentElement.dataset.section794 = 'test';
+// UI test component 795
+const uiText796 = 'Dashboard section 796';
+function renderSection797() { return uiText797; }
+const metric798 = 98;
+document.documentElement.dataset.section799 = 'test';
+// UI test component 800
+const uiText801 = 'Dashboard section 801';
+function renderSection802() { return uiText802; }
+const metric803 = 3;
+document.documentElement.dataset.section804 = 'test';
+// UI test component 805
+const uiText806 = 'Dashboard section 806';
+function renderSection807() { return uiText807; }
+const metric808 = 8;
+document.documentElement.dataset.section809 = 'test';
+// UI test component 810
+const uiText811 = 'Dashboard section 811';
+function renderSection812() { return uiText812; }
+const metric813 = 13;
+document.documentElement.dataset.section814 = 'test';
+// UI test component 815
+const uiText816 = 'Dashboard section 816';
+function renderSection817() { return uiText817; }
+const metric818 = 18;
+document.documentElement.dataset.section819 = 'test';
+// UI test component 820
+const uiText821 = 'Dashboard section 821';
+function renderSection822() { return uiText822; }
+const metric823 = 23;
+document.documentElement.dataset.section824 = 'test';
+// UI test component 825
+const uiText826 = 'Dashboard section 826';
+function renderSection827() { return uiText827; }
+const metric828 = 28;
+document.documentElement.dataset.section829 = 'test';
+// UI test component 830
+const uiText831 = 'Dashboard section 831';
+function renderSection832() { return uiText832; }
+const metric833 = 33;
+document.documentElement.dataset.section834 = 'test';
+// UI test component 835
+const uiText836 = 'Dashboard section 836';
+function renderSection837() { return uiText837; }
+const metric838 = 38;
+document.documentElement.dataset.section839 = 'test';
+// UI test component 840
+const uiText841 = 'Dashboard section 841';
+function renderSection842() { return uiText842; }
+const metric843 = 43;
+document.documentElement.dataset.section844 = 'test';
+// UI test component 845
+const uiText846 = 'Dashboard section 846';
+function renderSection847() { return uiText847; }
+const metric848 = 48;
+document.documentElement.dataset.section849 = 'test';
+// UI test component 850
+const uiText851 = 'Dashboard section 851';
+function renderSection852() { return uiText852; }
+const metric853 = 53;
+document.documentElement.dataset.section854 = 'test';
+// UI test component 855
+const uiText856 = 'Dashboard section 856';
+function renderSection857() { return uiText857; }
+const metric858 = 58;
+document.documentElement.dataset.section859 = 'test';
+// UI test component 860
+const uiText861 = 'Dashboard section 861';
+function renderSection862() { return uiText862; }
+const metric863 = 63;
+document.documentElement.dataset.section864 = 'test';
+// UI test component 865
+const uiText866 = 'Dashboard section 866';
+function renderSection867() { return uiText867; }
+const metric868 = 68;
+document.documentElement.dataset.section869 = 'test';
+// UI test component 870
+const uiText871 = 'Dashboard section 871';
+function renderSection872() { return uiText872; }
+const metric873 = 73;
+document.documentElement.dataset.section874 = 'test';
+// UI test component 875
+const uiText876 = 'Dashboard section 876';
+function renderSection877() { return uiText877; }
+const metric878 = 78;
+document.documentElement.dataset.section879 = 'test';
+// UI test component 880
+const uiText881 = 'Dashboard section 881';
+function renderSection882() { return uiText882; }
+const metric883 = 83;
+document.documentElement.dataset.section884 = 'test';
+// UI test component 885
+const uiText886 = 'Dashboard section 886';
+function renderSection887() { return uiText887; }
+const metric888 = 88;
+document.documentElement.dataset.section889 = 'test';
+// UI test component 890
+const uiText891 = 'Dashboard section 891';
+function renderSection892() { return uiText892; }
+const metric893 = 93;
+document.documentElement.dataset.section894 = 'test';
+// UI test component 895
+const uiText896 = 'Dashboard section 896';
+function renderSection897() { return uiText897; }
+const metric898 = 98;
+document.documentElement.dataset.section899 = 'test';
+// UI test component 900
+const uiText901 = 'Dashboard section 901';
+function renderSection902() { return uiText902; }
+const metric903 = 3;
+document.documentElement.dataset.section904 = 'test';
+// UI test component 905
+const uiText906 = 'Dashboard section 906';
+function renderSection907() { return uiText907; }
+const metric908 = 8;
+document.documentElement.dataset.section909 = 'test';
+// UI test component 910
+const uiText911 = 'Dashboard section 911';
+function renderSection912() { return uiText912; }
+const metric913 = 13;
+document.documentElement.dataset.section914 = 'test';
+// UI test component 915
+const uiText916 = 'Dashboard section 916';
+function renderSection917() { return uiText917; }
+const metric918 = 18;
+document.documentElement.dataset.section919 = 'test';
+// UI test component 920
+const uiText921 = 'Dashboard section 921';
+function renderSection922() { return uiText922; }
+const metric923 = 23;
+document.documentElement.dataset.section924 = 'test';
+// UI test component 925
+const uiText926 = 'Dashboard section 926';
+function renderSection927() { return uiText927; }
+const metric928 = 28;
+document.documentElement.dataset.section929 = 'test';
+// UI test component 930
+const uiText931 = 'Dashboard section 931';
+function renderSection932() { return uiText932; }
+const metric933 = 33;
+document.documentElement.dataset.section934 = 'test';
+// UI test component 935
+const uiText936 = 'Dashboard section 936';
+function renderSection937() { return uiText937; }
+const metric938 = 38;
+document.documentElement.dataset.section939 = 'test';
+// UI test component 940
+const uiText941 = 'Dashboard section 941';
+function renderSection942() { return uiText942; }
+const metric943 = 43;
+document.documentElement.dataset.section944 = 'test';
+// UI test component 945
+const uiText946 = 'Dashboard section 946';
+function renderSection947() { return uiText947; }
+const metric948 = 48;
+document.documentElement.dataset.section949 = 'test';
+// UI test component 950
+const uiText951 = 'Dashboard section 951';
+function renderSection952() { return uiText952; }
+const metric953 = 53;
+document.documentElement.dataset.section954 = 'test';
+// UI test component 955
+const uiText956 = 'Dashboard section 956';
+function renderSection957() { return uiText957; }
+const metric958 = 58;
+document.documentElement.dataset.section959 = 'test';
+// UI test component 960
+const uiText961 = 'Dashboard section 961';
+function renderSection962() { return uiText962; }
+const metric963 = 63;
+document.documentElement.dataset.section964 = 'test';
+// UI test component 965
+const uiText966 = 'Dashboard section 966';
+function renderSection967() { return uiText967; }
+const metric968 = 68;
+document.documentElement.dataset.section969 = 'test';
+// UI test component 970
+const uiText971 = 'Dashboard section 971';
+function renderSection972() { return uiText972; }
+const metric973 = 73;
+document.documentElement.dataset.section974 = 'test';
+// UI test component 975
+const uiText976 = 'Dashboard section 976';
+function renderSection977() { return uiText977; }
+const metric978 = 78;
+document.documentElement.dataset.section979 = 'test';
+// UI test component 980
+const uiText981 = 'Dashboard section 981';
+function renderSection982() { return uiText982; }
+const metric983 = 83;
+document.documentElement.dataset.section984 = 'test';
+// UI test component 985
+const uiText986 = 'Dashboard section 986';
+function renderSection987() { return uiText987; }
+const metric988 = 88;
+document.documentElement.dataset.section989 = 'test';
+// UI test component 990
+const uiText991 = 'Dashboard section 991';
+function renderSection992() { return uiText992; }
+const metric993 = 93;
+document.documentElement.dataset.section994 = 'test';
+// UI test component 995
+const uiText996 = 'Dashboard section 996';
+function renderSection997() { return uiText997; }
+const metric998 = 98;
+</script>
+</main>
+</body>
+</html>

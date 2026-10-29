@@ -116,7 +116,7 @@ class TestScanResult:
         assert r.risk_score > 0
         assert r.grade in ("A", "B", "C", "D", "F")
 
-    def test_risk_score_excludes_false_positives_and_non_security(self):
+    def test_risk_score_excludes_false_positives_and_counts_dependencies(self):
         r = ScanResult()
         r.findings = [
             Finding(
@@ -146,7 +146,7 @@ class TestScanResult:
                 location=CodeLocation(file_path="x.py", line=4),
             ),
         ]
-        assert r.risk_score == 0
+        assert r.risk_score == Severity.HIGH.weight
 
     def test_deduplicate(self):
         r = ScanResult()

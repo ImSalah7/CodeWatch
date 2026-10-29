@@ -1,4 +1,4 @@
-# Developer Guide — MyScan
+# Developer Guide — CodeWatch
 
 ## 1. Repository layout
 

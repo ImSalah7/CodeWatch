@@ -1,4 +1,4 @@
-"""Production launcher for the MyScan API server.
+"""Production launcher for the CodeWatch API server.
 
 Environment variables:
     MYSCAN_HOST          Bind address (default 0.0.0.0)
@@ -30,10 +30,10 @@ def main() -> None:
     try:
         from waitress import serve
 
-        print(f"MyScan API listening on http://{HOST}:{PORT} (waitress)")
+        print(f"CodeWatch API listening on http://{HOST}:{PORT} (waitress)")
         serve(app, host=HOST, port=PORT, threads=16, channel_timeout=600)
     except ImportError:
-        print(f"MyScan API listening on http://{HOST}:{PORT} (Flask dev server)")
+        print(f"CodeWatch API listening on http://{HOST}:{PORT} (Flask dev server)")
         app.run(host=HOST, port=PORT, debug=DEBUG)
 
 

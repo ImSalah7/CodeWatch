@@ -11,6 +11,7 @@ from pathlib import Path
 
 from ..core.config import SKIP_EXTENSIONS, SKIP_FILES, SKIP_PATH_PATTERNS, ScanConfig
 from ..core.models import (
+    CodeLocation,
     EXTENSION_MAP,
     Finding,
     FindingCategory,
@@ -51,7 +52,9 @@ class ScanEngine:
         from ..scanners.security_scanner import SecurityScanner
 
         if not self.config.skip_security:
-            self.scanners.append(SecurityScanner())
+            self.scanners.append(
+                SecurityScanner(suppress_secret_rules=not self.config.skip_secrets)
+            )
         if not (self.config.skip_quality or self.config.skip_info):
             self.scanners.append(QualityScanner())
         if not self.config.skip_secrets:
@@ -124,6 +127,9 @@ class ScanEngine:
             if tracker:
                 tracker.on_file_done(str(file_path))
 
+        if not self.config.skip_deps:
+            self._scan_dependency_vulnerabilities(target_path, result)
+
         result.deduplicate()
         if self._validation_pipeline:
             result.filter_false_positives_with_validation(self._validation_pipeline)
@@ -139,6 +145,68 @@ class ScanEngine:
         if tracker:
             tracker.on_complete(result.to_dict()["summary"])
         return result
+
+    def _scan_dependency_vulnerabilities(self, target_path: Path, result: ScanResult) -> None:
+        from .dependency_scanner import DependencyScanner
+
+        scanner = DependencyScanner()
+        for manifest_result in scanner.scan_repository(str(target_path)):
+            manifest_path = Path(manifest_result.file_path)
+            try:
+                relative_path = str(manifest_path.relative_to(target_path))
+            except ValueError:
+                relative_path = str(manifest_path)
+
+            for vulnerability in manifest_result.vulnerabilities:
+                severity = Severity(vulnerability.severity.value)
+                for dependency in manifest_result.dependencies:
+                    if (
+                        dependency.name.lower() != vulnerability.dependency_name.lower()
+                        or dependency.version != vulnerability.dependency_version
+                        or dependency.version_specifier != vulnerability.dependency_specifier
+                    ):
+                        continue
+                    specifier = dependency.version_specifier
+                    is_exact = (
+                        not specifier
+                        or (
+                            specifier.startswith(("==", "="))
+                            and not specifier.startswith((">=", "<=", "!="))
+                            and "," not in specifier
+                        )
+                    )
+                    if is_exact:
+                        description = (
+                            f"{dependency.name} {dependency.version} is affected by "
+                            f"{vulnerability.vulnerability_id}. Upgrade to "
+                            f"{vulnerability.fixed_version} or later."
+                        )
+                        code_snippet = f"{dependency.name}=={dependency.version}"
+                    else:
+                        description = (
+                            f"{dependency.name} declares version constraint {specifier}, which may include "
+                            f"versions affected by {vulnerability.vulnerability_id}. "
+                            f"Constrain it to {vulnerability.fixed_version} or later."
+                        )
+                        code_snippet = f"{dependency.name}{specifier}"
+                    result.findings.append(Finding(
+                        rule_id=f"DEP_{vulnerability.vulnerability_id.replace('-', '_')}",
+                        title=vulnerability.title or vulnerability.vulnerability_id,
+                        description=description,
+                        severity=severity,
+                        confidence=0.95,
+                        category=FindingCategory.DEPENDENCY,
+                        language=Language.UNKNOWN,
+                        location=CodeLocation(
+                            file_path=relative_path,
+                            line=dependency.line or 1,
+                            code_snippet=code_snippet,
+                        ),
+                        cwe=vulnerability.cwe,
+                        references=vulnerability.references,
+                        tags=["dependency", vulnerability.dependency_name.lower()],
+                        matched_pattern=vulnerability.vulnerability_id,
+                    ))
 
     def _scan_enterprise(self, target_path: Path, result: ScanResult, start: float) -> ScanResult:
         """Run enterprise-grade analysis with AST, data flow, taint, and context analysis."""
@@ -310,6 +378,9 @@ class ScanEngine:
                     pass
 
             result.findings.append(finding)
+
+        if not self.config.skip_deps:
+            self._scan_dependency_vulnerabilities(target_path, result)
 
         result.deduplicate()
         result.apply_severity_gates()

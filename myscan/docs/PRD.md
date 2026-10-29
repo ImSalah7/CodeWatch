@@ -1,12 +1,12 @@
-# Product Requirements Document (PRD) — MyScan
+# Product Requirements Document (PRD) — CodeWatch
 
 > Version 3.0.0 · Status: Active · Owner: Engineering
 
 ## 1. Product summary
 
-MyScan is an enterprise-grade, self-hosted **Static Application Security Testing (SAST)** platform. It analyzes source code repositories — local folders or remote git URLs — to detect security vulnerabilities, hardcoded secrets, code-quality issues, and vulnerable dependencies. It produces actionable findings with evidence, root-cause analysis, and remediation guidance, and exposes them through a REST API, a web UI, a CLI, and portable report artifacts.
+CodeWatch is an enterprise-grade, self-hosted **Static Application Security Testing (SAST)** platform. It analyzes source code repositories — local folders or remote git URLs — to detect security vulnerabilities, hardcoded secrets, code-quality issues, and vulnerable dependencies. It produces actionable findings with evidence, root-cause analysis, and remediation guidance, and exposes them through a REST API, a web UI, a CLI, and portable report artifacts.
 
-MyScan is designed for development teams and security teams who want a fast, accurate, fully on-premise scanner with no per-seat licensing and full data control.
+CodeWatch is designed for development teams and security teams who want a fast, accurate, fully on-premise scanner with no per-seat licensing and full data control.
 
 ## 2. Problem statement
 
@@ -85,7 +85,7 @@ MyScan is designed for development teams and security teams who want a fast, acc
 
 ## 8. Success metrics
 
-- Test suite passes: **405 tests**.
+- Test suite passes: **574 tests**.
 - SQL injection rule verified against a 17-case parameterized-vs-interpolated matrix (no false positives on parameterized queries).
 - A full self-scan of `src/` completes in seconds with deduplicated occurrences.
 - Benchmark mode reports precision/recall/F1 vs Semgrep and Bandit.

@@ -1,4 +1,4 @@
-# System Design — MyScan
+# System Design — CodeWatch
 
 Detailed design of each subsystem. Complements [architecture.md](architecture.md); source of truth is the code (`src/`).
 

@@ -194,7 +194,7 @@ class TestEnhancedReporters:
         from src.reporters.html_report import HTMLReporter
         result = self._make_result()
         html = HTMLReporter().generate(result)
-        assert "MyScan Enterprise" in html
+        assert "CodeWatch" in html
         assert "SQL Injection" in html
         assert "score-card" in html
         assert "owasp" in html.lower() or "finding-card" in html
@@ -244,7 +244,7 @@ class TestEnhancedReporters:
         from src.reporters.markdown_report import MarkdownReporter
         result = self._make_result()
         md = MarkdownReporter().generate(result)
-        assert "MyScan Enterprise" in md
+        assert "CodeWatch" in md
         assert "SQL Injection" in md
         assert "Risk Summary" in md
         assert "Security Findings" in md

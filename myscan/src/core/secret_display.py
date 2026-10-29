@@ -161,16 +161,13 @@ def get_secret_display_value(finding: Finding, mode: SecretDisplayMode = SecretD
         return mask_secret(raw)
 
     if mode == SecretDisplayMode.SMART:
-        tags = finding.tags
-        line_context = finding.location.code_snippet or ""
-
-        if is_weak_password(raw, line_context):
+        if is_weak_password(raw):
             return raw
 
-        if is_default_credential(raw, line_context):
+        if is_default_credential(raw):
             return raw
 
-        if is_production_secret(finding.rule_id, tags):
+        if is_production_secret(finding.rule_id, finding.tags):
             return mask_secret(raw)
 
         return mask_secret(raw)

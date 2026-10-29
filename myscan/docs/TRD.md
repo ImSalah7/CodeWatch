@@ -1,10 +1,10 @@
-# Technical Requirements Document (TRD) — MyScan
+# Technical Requirements Document (TRD) — CodeWatch
 
 > Version 3.0.0 · Status: Active · Applies to codebase at commit `c35443c`
 
 ## 1. Overview
 
-This document specifies the technical requirements and constraints for MyScan. It is the authoritative reference for how the system is built and how its parts interoperate, complementing [architecture.md](architecture.md) and [system-design.md](system-design.md).
+This document specifies the technical requirements and constraints for CodeWatch. It is the authoritative reference for how the system is built and how its parts interoperate, complementing [architecture.md](architecture.md) and [system-design.md](system-design.md).
 
 ## 2. Technology stack
 
@@ -93,7 +93,7 @@ Persisted to `src/myscan_settings.json` (auto-created). Defaults:
 
 | # | Requirement | Verification |
 |---|---|---|
-| NFR-1 | `pytest` suite passes: **405 tests** | `python -m pytest tests -q` |
+| NFR-1 | `pytest` suite passes: **574 tests** | `python -m pytest tests -q` |
 | NFR-2 | Lint: ruff, line-length 120 | `python -m ruff check src tests` |
 | NFR-3 | Type hints: mypy strict-ish (`disallow_untyped_defs`) | `python -m mypy src` |
 | NFR-4 | Frontend type-checks and builds | `npm run build` (includes `tsc`) |

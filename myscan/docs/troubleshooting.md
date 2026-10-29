@@ -1,4 +1,4 @@
-# Troubleshooting — MyScan
+# Troubleshooting — CodeWatch
 
 ## 1. Common problems
 
@@ -29,7 +29,7 @@ Both services must share the same key:
 
 ### Rate limits appear to target the wrong client
 
-- Behind a reverse proxy, MyScan sees the proxy's IP unless `MYSCAN_TRUST_PROXY=1` is set **and** the proxy sets/overwrites `X-Forwarded-For`.
+- Behind a reverse proxy, CodeWatch sees the proxy's IP unless `MYSCAN_TRUST_PROXY=1` is set **and** the proxy sets/overwrites `X-Forwarded-For`.
 
 ### Secrets are visible in reports
 
@@ -106,4 +106,4 @@ Known: `results/page.tsx` must wrap the client component in `<Suspense>` and pas
 ## 6. Getting help
 
 - Open an issue at the repository (once the remote is configured).
-- Include: MyScan version (`python -m src.cli --version`), OS, scan target type (local/git), the failing report format if relevant, and sanitized error output.
+- Include: CodeWatch version (`python -m src.cli --version`), OS, scan target type (local/git), the failing report format if relevant, and sanitized error output.

@@ -585,6 +585,8 @@ def score_secret(
     # --- Rejections that apply to every secret type. ---------------------
     if is_placeholder_value(v):
         return SecretSignalScore(reject_reason="value is a known placeholder")
+    if v.lower().startswith("mscan_test_"):
+        return SecretSignalScore(reject_reason="value uses MyScan's synthetic test-key prefix")
     # Structural formats (PEM headers contain `-----`, JWTs are base64url) can
     # legitimately contain repeated runs, so skip the weak-value check there.
     if rule_kind not in ("private_key", "jwt") and is_weak_credential_value(v):

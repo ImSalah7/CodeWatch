@@ -1,10 +1,10 @@
-# Architecture — MyScan
+# Architecture — CodeWatch
 
 > Companion docs: [system-design.md](system-design.md) (subsystem design), [folder-structure.md](folder-structure.md) (layout), [api.md](api.md) (API).
 
 ## 1. System context
 
-MyScan is a three-surface application: a **web UI**, a **CLI**, and a **REST API**, all backed by a shared **scan engine** and a **SQLite** store. The web UI talks to the API exclusively through a server-side proxy so API credentials never reach the browser.
+CodeWatch is a three-surface application: a **web UI**, a **CLI**, and a **REST API**, all backed by a shared **scan engine** and a **SQLite** store. The web UI talks to the API exclusively through a server-side proxy so API credentials never reach the browser.
 
 ```
                     ┌─────────────────────────────────────────────┐
