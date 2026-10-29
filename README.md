@@ -1,6 +1,6 @@
 # CodeWatch
 
-AI-Powered SAST Platform** — Static Application Security Testing, secrets detection, code-quality analysis, dependency vulnerability scanning, and SBOM generation.
+**Enterprise AI-Powered SAST Platform** — Static Application Security Testing, secrets detection, code-quality analysis, dependency vulnerability scanning, and SBOM generation.
 
 CodeWatch scans local and remote (git) repositories with a multi-layered analysis engine: regex rule scanning, tree-sitter AST analysis, data-flow/taint tracking, call-graph reachability, and optional LLM-assisted enrichment. Results are exposed through a REST API, a rich Next.js web UI, a CLI, and portable reports (Markdown, HTML, JSON, SARIF, CSV).
 
