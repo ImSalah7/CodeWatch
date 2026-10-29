@@ -76,17 +76,10 @@ export function DashboardClient() {
       <motion.div
         initial={{ opacity: 0 }}
         animate={{ opacity: 1 }}
-        className="flex items-center justify-between"
       >
-        <div>
-          <p className="text-sm text-muted italic font-medium">
-            Detect vulnerabilities. Validate risks. Secure your code.
-          </p>
-        </div>
-        <div className="flex items-center gap-2 text-xs text-muted">
-          <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse" />
-          Engine Online
-        </div>
+        <p className="text-sm text-muted italic font-medium">
+          Detect vulnerabilities. Validate risks. Secure your code.
+        </p>
       </motion.div>
 
       {loading ? (
