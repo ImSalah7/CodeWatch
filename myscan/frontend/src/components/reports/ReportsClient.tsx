@@ -141,11 +141,22 @@ export function ReportsClient() {
 
   return (
     <div className="space-y-5 max-w-[1600px]">
-      <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }}>
-        <h1 className="text-xl font-bold text-foreground">Security Findings</h1>
-        <p className="text-sm text-muted mt-0.5">
-          Browse and analyze detected vulnerabilities
-        </p>
+      <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="flex items-center justify-between flex-wrap gap-3">
+        <div>
+          <h1 className="text-xl font-bold text-foreground">Security Findings</h1>
+          <p className="text-sm text-muted mt-0.5">
+            Browse and analyze detected vulnerabilities
+          </p>
+        </div>
+        {selectedJob && (
+          <a
+            href={`/results?job_id=${selectedJob}`}
+            className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-surface-elevated border border-border text-foreground hover:border-accent text-xs font-medium transition"
+          >
+            <ExternalLink className="w-3.5 h-3.5 text-accent" />
+            Detailed Findings View
+          </a>
+        )}
       </motion.div>
 
       <motion.div

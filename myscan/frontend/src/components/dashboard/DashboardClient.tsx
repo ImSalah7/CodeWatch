@@ -202,9 +202,10 @@ export function DashboardClient() {
           ) : history.length > 0 ? (
             <div className="space-y-0">
               {history.slice(0, 6).map((job) => (
-                <div
+                <a
                   key={job.job_id}
-                  className="flex items-center gap-3 py-2.5 border-b border-border/50 last:border-0 table-row"
+                  href={`/results?job_id=${job.job_id}`}
+                  className="flex items-center gap-3 py-2.5 px-2 -mx-2 rounded-lg border-b border-border/50 last:border-0 hover:bg-surface-elevated transition-colors cursor-pointer group"
                 >
                   <span
                     className={`w-2 h-2 rounded-full flex-shrink-0 ${
@@ -216,7 +217,7 @@ export function DashboardClient() {
                     }`}
                   />
                   <div className="flex-1 min-w-0">
-                    <p className="text-xs font-medium text-foreground truncate">
+                    <p className="text-xs font-medium text-foreground truncate group-hover:text-accent transition-colors">
                       {job.target.split(/[/\\]/).pop() || job.target}
                     </p>
                     <p className="text-[11px] text-muted truncate">{job.target}</p>
@@ -225,7 +226,7 @@ export function DashboardClient() {
                     <p className="text-xs font-mono text-foreground font-medium">{job.finding_count} issues</p>
                     <p className="text-[11px] text-muted">{timeAgo(job.started_at)}</p>
                   </div>
-                </div>
+                </a>
               ))}
             </div>
           ) : (

@@ -12,14 +12,12 @@ import {
   ChevronLeft,
   ChevronRight,
   Zap,
-  ShieldCheck,
 } from "lucide-react";
 import { useState } from "react";
 
 const navItems = [
   { href: "/", label: "Dashboard", icon: LayoutDashboard },
   { href: "/scan", label: "New Scan", icon: ScanSearch },
-  { href: "/results", label: "Results", icon: ShieldCheck },
   { href: "/reports", label: "Reports", icon: FileText },
 ];
 

@@ -33,14 +33,17 @@ import {
   FileText,
   Box,
   Layers,
+  Loader2,
+  ScanSearch,
 } from "lucide-react";
 import {
   getFindings,
+  getHistory,
   bulkFindingAction,
   downloadReport,
   type FindingsQuery,
 } from "@/lib/api";
-import type { Finding, FindingsMetadata } from "@/lib/types";
+import type { Finding, FindingsMetadata, ScanJob } from "@/lib/types";
 import type { LucideIcon } from "lucide-react";
 
 const SEVERITY_ORDER = ["critical", "high", "medium", "low", "info"] as const;
@@ -104,6 +107,8 @@ function formatSize(bytes: number): string {
 
 export function ResultsClient({ initialJobId }: { initialJobId?: string }) {
   const [jobId, setJobId] = useState(initialJobId || "");
+  const [jobs, setJobs] = useState<ScanJob[]>([]);
+
   const [findings, setFindings] = useState<Finding[]>([]);
   const [total, setTotal] = useState(0);
   const [metadata, setMetadata] = useState<FindingsMetadata | null>(null);
@@ -124,6 +129,25 @@ export function ResultsClient({ initialJobId }: { initialJobId?: string }) {
   const [assignValue, setAssignValue] = useState("");
   const [busy, setBusy] = useState(false);
   const searchTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  // Automatically load the latest scan if initialJobId is empty
+  useEffect(() => {
+    getHistory(30)
+      .then((h) => {
+        const list = h.history || [];
+        setJobs(list);
+        if (!initialJobId && list.length > 0) {
+          const completed = list.filter((j) => j.status === "completed");
+          const targetJob = completed.length > 0 ? completed[0] : list[0];
+          setJobId(targetJob.job_id);
+        } else if (!initialJobId && list.length === 0) {
+          setLoading(false);
+        }
+      })
+      .catch(() => {
+        if (!initialJobId) setLoading(false);
+      });
+  }, [initialJobId]);
 
   // Debounce the free-text search field.
   useEffect(() => {
@@ -261,24 +285,69 @@ export function ResultsClient({ initialJobId }: { initialJobId?: string }) {
 
   const languages = useMemo(() => Object.keys(metadata?.languages || {}), [metadata]);
 
-  if (!jobId)
+  if (loading && !jobId) {
     return (
-      <div className="p-8 text-zinc-500">
-        No scan selected. Run a scan first or select one from the Reports page.
+      <div className="p-16 flex flex-col items-center justify-center text-zinc-400 gap-3">
+        <Loader2 className="w-6 h-6 animate-spin text-accent" />
+        <p className="text-sm">Loading scan results...</p>
       </div>
     );
+  }
+
+  if (!jobId) {
+    return (
+      <div className="p-16 max-w-md mx-auto text-center space-y-4">
+        <div className="w-12 h-12 rounded-xl bg-surface-elevated border border-border flex items-center justify-center mx-auto text-muted">
+          <ShieldAlert className="w-6 h-6 text-accent" />
+        </div>
+        <h2 className="text-lg font-semibold text-foreground">No Scans Found</h2>
+        <p className="text-xs text-muted">
+          No scan results are available yet. Run your first security scan to analyze vulnerabilities.
+        </p>
+        <a
+          href="/scan"
+          className="inline-flex items-center gap-2 px-4 py-2 rounded-lg bg-accent text-white text-xs font-medium hover:opacity-90 transition"
+        >
+          <ScanSearch className="w-4 h-4" />
+          Start New Scan
+        </a>
+      </div>
+    );
+  }
 
   return (
     <div className="p-6 space-y-6">
       {/* Header */}
       <div className="flex flex-wrap items-center justify-between gap-3">
-        <div className="min-w-0">
-          <h1 className="text-2xl font-bold text-white">Scan Results</h1>
-          <div className="flex flex-wrap items-center gap-x-3 gap-y-1 mt-1 text-xs text-zinc-500">
-            <span className="font-mono">{jobId.slice(0, 8)}</span>
-            {metadata?.target && <span className="font-mono truncate max-w-[320px]">{metadata.target}</span>}
-            {metadata?.completed_at && <span className="flex items-center gap-1"><Clock className="w-3 h-3" />{timeAgo(metadata.completed_at)}</span>}
+        <div className="min-w-0 flex items-center gap-4 flex-wrap">
+          <div>
+            <h1 className="text-2xl font-bold text-white">Scan Results</h1>
+            <div className="flex flex-wrap items-center gap-x-3 gap-y-1 mt-1 text-xs text-zinc-500">
+              <span className="font-mono">{jobId.slice(0, 8)}</span>
+              {metadata?.target && <span className="font-mono truncate max-w-[320px]">{metadata.target}</span>}
+              {metadata?.completed_at && <span className="flex items-center gap-1"><Clock className="w-3 h-3" />{timeAgo(metadata.completed_at)}</span>}
+            </div>
           </div>
+          {jobs.length > 1 && (
+            <div className="flex items-center gap-2 bg-zinc-900 border border-zinc-800 rounded-lg px-2.5 py-1.5 text-xs">
+              <span className="text-zinc-500 font-medium">Scan:</span>
+              <select
+                value={jobId}
+                aria-label="Select scan"
+                onChange={(e) => {
+                  setJobId(e.target.value);
+                  setOffset(0);
+                }}
+                className="bg-transparent text-white border-0 outline-none cursor-pointer text-xs"
+              >
+                {jobs.map((j) => (
+                  <option key={j.job_id} value={j.job_id} className="bg-zinc-900 text-white">
+                    {j.target.replace("\\", "/").split("/").pop() || j.target} ({j.job_id.slice(0, 8)}) - {j.status}
+                  </option>
+                ))}
+              </select>
+            </div>
+          )}
         </div>
         <div className="flex items-center gap-2">
           {["json", "html", "markdown", "csv", "sarif"].map((f) => (
