@@ -79,9 +79,8 @@ export function DashboardClient() {
         className="flex items-center justify-between"
       >
         <div>
-          <h1 className="text-xl font-bold text-foreground">Security Overview</h1>
-          <p className="text-sm text-muted mt-0.5">
-            Real-time vulnerability monitoring and risk assessment
+          <p className="text-sm text-muted italic font-medium">
+            Detect vulnerabilities. Validate risks. Secure your code.
           </p>
         </div>
         <div className="flex items-center gap-2 text-xs text-muted">
